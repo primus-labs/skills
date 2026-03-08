@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web Template Capture"
+  short_description: "Discover request URLs and field paths for websites."
+  default_prompt: "Use $web-template-capture to capture a website session, rank candidate fields, and draft a reusable template."
+
+policy:
+  allow_implicit_invocation: true
