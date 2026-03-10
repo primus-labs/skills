@@ -67,7 +67,7 @@ npm run emit:template -- \
 After installing the skill into `~/.codex/skills`, you can invoke it in Codex with a prompt like:
 
 ```text
-使用 Web Template Capture 帮我为 https://www.binance.com/zh-CN/my/dashboard 创建模版，目标字段是30天交易量
+Use Web Template Capture to prepare a template for https://www.binance.com/en/my/dashboard. The target field is 30-day trading volume.
 ```
 
 Or:

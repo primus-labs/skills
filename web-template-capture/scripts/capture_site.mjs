@@ -44,10 +44,9 @@ const SAFE_DISCOVERY_TERMS = [
   "trading",
   "30d",
   "30 days",
-  "30天",
-  "成交量",
-  "交易量",
-  "费率"
+  "30-day",
+  "volume",
+  "fee tier"
 ];
 const LOGIN_URL_PATTERNS = [
   /\/login\b/i,
@@ -110,17 +109,17 @@ function buildTargetProfile({ fieldName = "", targetKeywords = "", navigationHin
   }
 
   const field = String(fieldName);
-  if (/volume|trading volume|trade volume|turnover|交易量|成交量/i.test(field)) {
-    phrases.push("交易量", "成交量", "30天", "近30天", "trading volume", "trade volume");
-    tokens.push("volume", "trading", "trade", "turnover", "交易量", "成交量", "30天", "30d", "btc");
+  if (/volume|trading volume|trade volume|turnover/i.test(field)) {
+    phrases.push("trading volume", "trade volume", "30-day", "last 30 days");
+    tokens.push("volume", "trading", "trade", "turnover", "30d", "30-day", "btc");
   }
-  if (/fee|vip|level|tier|费率|等级/i.test(field) || /fee|vip|level|tier|费率|等级/i.test(navigationHint)) {
-    phrases.push("vip", "费率等级", "trading fee level");
-    tokens.push("vip", "fee", "level", "tier", "maker", "taker", "费率", "等级");
+  if (/fee|vip|level|tier/i.test(field) || /fee|vip|level|tier/i.test(navigationHint)) {
+    phrases.push("vip", "fee tier", "trading fee level");
+    tokens.push("vip", "fee", "level", "tier", "maker", "taker");
   }
-  if (/30天|30日|近30天|30d|30 days/i.test(field) || /30天|30日|近30天|30d|30 days/i.test(navigationHint)) {
-    phrases.push("30天", "30日", "近30天", "30d", "30 days", "last 30 days");
-    tokens.push("30天", "30日", "30d", "30", "days");
+  if (/(30d|30 day|30-day|30 days|last 30 days)/i.test(field) || /(30d|30 day|30-day|30 days|last 30 days)/i.test(navigationHint)) {
+    phrases.push("30d", "30-day", "30 days", "last 30 days");
+    tokens.push("30d", "30-day", "30", "days");
   }
 
   return {

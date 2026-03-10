@@ -17,7 +17,7 @@ Collect these inputs before running scripts:
 - `target_field_name`: human name such as `username`, `email`, `balance`, `tier`
 - `target_field_type`: `string`, `number`, `boolean`, or `date`
 - `target_hint_value`: optional sample value if the user already knows it
-- `target_keywords`: optional extra phrases such as `30天, 交易量, BTC成交量, 费率等级`
+- `target_keywords`: optional extra phrases such as `30-day, trading volume, BTC trading volume, fee tier`
 - `navigation_hint`: where the user should navigate after login
 - `ownership_mode`: `current_user`, `page_subject`, or `any_visible_record`
 
@@ -60,10 +60,10 @@ node web-template-capture/scripts/capture_site.mjs \
 Capture with the legacy manual mode:
 
 ```bash
-node web-template-capture/scripts/capture_site.mjs \
+  node web-template-capture/scripts/capture_site.mjs \
   --site-url https://example.com/app \
   --manual-capture \
-  --target-field-name "30天交易量" \
+  --target-field-name "30-day trading volume" \
   --navigation-hint "Log in if needed, then navigate manually to the page containing the target field."
 ```
 

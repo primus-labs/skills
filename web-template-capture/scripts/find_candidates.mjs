@@ -35,8 +35,8 @@ function buildFieldProfile(fieldName) {
     balance: ["balance", "amount", "total", "available", "funds"],
     volume: ["volume", "trading_volume", "trade_volume", "turnover", "amount"],
     trading: ["trade", "trading", "maker", "taker", "fee", "order"],
-    connections: ["connections", "network", "contact", "contacts", "friend", "friends", "好友", "人脉"],
-    list: ["list", "items", "records", "entries", "列表", "清单"],
+    connections: ["connections", "network", "contact", "contacts", "friend", "friends"],
+    list: ["list", "items", "records", "entries"],
     tier: ["tier", "level", "membership", "plan", "rank"],
     status: ["status", "state", "stage"],
     id: ["id", "identifier", "account_id", "user_id", "member_id"],
@@ -56,7 +56,7 @@ function buildFieldProfile(fieldName) {
     }
   }
 
-  if (/(交易量|成交量|volume|turnover|\bvol\b)/.test(normalizedFieldName)) {
+  if (/(volume|turnover|\bvol\b)/.test(normalizedFieldName)) {
     strictSemanticMatch = true;
     extras.push(
       "volume",
@@ -75,12 +75,12 @@ function buildFieldProfile(fieldName) {
     negativeTokens.push("time", "timestamp", "level", "status", "commissionstatus", "date");
   }
 
-  if (/(30天|30日|30d|30day|30 day)/.test(normalizedFieldName)) {
+  if (/(30d|30day|30 day|30-day|30 days)/.test(normalizedFieldName)) {
     strictSemanticMatch = true;
     extras.push("30d", "30day", "30", "daily", "statistics");
   }
 
-  if (/(创建时间|created_at|created at|creation time|signup)/.test(normalizedFieldName)) {
+  if (/(created_at|created at|creation time|signup)/.test(normalizedFieldName)) {
     strictSemanticMatch = true;
     extras.push("created", "created_at", "creation", "signup", "registered", "joined", "time", "date");
     negativeTokens.push("volume", "level", "status");
@@ -253,7 +253,7 @@ function dedupeReasons(reasons) {
 }
 
 function isListLikeField(fieldName) {
-  return /(list|列表|清单|connections|records|items|entries|followers|following|orders|transactions|contacts|friends|好友|人脉)/i
+  return /(list|connections|records|items|entries|followers|following|orders|transactions|contacts|friends)/i
     .test(String(fieldName || ""));
 }
 
@@ -512,7 +512,7 @@ function scoreDomCandidate({
     reasons.push("matches current-user page");
   }
 
-  if (/\b(list|列表|connections|records|items|好友)\b/.test(normalizedFieldName) && node.xpath_pattern_count > 1) {
+  if (/\b(list|connections|records|items|friends)\b/.test(normalizedFieldName) && node.xpath_pattern_count > 1) {
     score += 14;
     reasons.push("list-like field with repeated nodes");
   }
