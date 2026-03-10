@@ -1,61 +1,34 @@
 # Template Output Schema
 
-`emit_template.mjs` produces a normalized JSON draft with these fields:
+`emit_template.mjs` should produce a template draft in this format:
 
 ```json
 {
-  "generated_at": "ISO-8601 timestamp",
-  "selected_candidate_index": 0,
-  "target": {
-    "field_name": "string",
-    "field_type": "string",
-    "hint_value": "string or null",
-    "ownership_mode": "string"
-  },
-  "source": {
-    "source_type": "network_json or html_dom",
-    "source_url": "string",
-    "entry_url": "string or null",
-    "request_method": "string or null",
-    "request_url_pattern": "string or null",
-    "operation_name": "string or null"
-  },
-  "field": {
-    "json_path": "string or null",
-    "dom_selector": "string or null",
-    "dom_xpath": "string or null",
-    "dom_item_xpath": "string or null",
-    "value_attribute": "string or null",
-    "sample_value": "any"
-  },
-  "stability": {
-    "score": 0,
-    "reasons": []
-  },
-  "alternatives": [
-    {
-      "index": 1,
-      "source_url": "string or null",
-      "request_method": "string or null",
-      "request_url_pattern": "string or null",
-      "operation_name": "string or null",
-      "json_path": "string or null",
-      "dom_selector": "string or null",
-      "dom_xpath": "string or null",
-      "dom_item_xpath": "string or null",
-      "value_attribute": "string or null",
-      "sample_value": "any",
-      "score": 0,
-      "why_not_top": []
-    }
-  ],
-  "notes": []
+  "name": "twitterusername-mcp",
+  "description": "Extracts the logged-in Twitter username from the account settings endpoint.",
+  "category": "OTHER",
+  "status": "AVAILABLE",
+  "dataSource": "twitter",
+  "testResult": "SUCCESS",
+  "templatePrivate": true,
+  "dataPageTemplate": "{\"baseUrl\":\"https://twitter.com\"}",
+  "dataSourceTemplate": "[{\"requestTemplate\":{\"targetUrlExpression\":\"https://api.x.com/1.1/account/settings.json.*\",\"targetUrlType\":\"REGX\",\"ext\":{},\"dynamicParamters\":[],\"method\":\"GET\"},\"responseTemplate\":[{\"resolver\":{\"type\":\"JSON_PATH\",\"expression\":\"$.screen_name\"},\"valueType\":\"FIXED_VALUE\",\"fieldType\":\"FIELD_REVEAL\",\"feilds\":[{\"fieldName\":\"\",\"showName\":\"\",\"key\":\"screen_name\",\"DataType\":\"string\"}]}]}]"
 }
 ```
 
-`source.source_url` is the page URL that actually triggered or exposed the selected request or DOM evidence. `source.entry_url` preserves the first URL opened by the capture script.
-`selected_candidate_index` lets callers map the draft back to `candidate-report.json`. `alternatives` provides compact summaries of the next-best candidates without replacing the default single selected template.
+Rules:
 
-For GraphQL requests, `request_url_pattern` should generalize the hash segment into `*` and keep the operation name stable.
-For HTML-only matches, `request_method` should be `GET`, `request_url_pattern` should be the page document URL, and `field.dom_xpath` should identify the rendered element or list.
-For list-like HTML fields, prefer `field.dom_xpath` as the full list XPath, `field.dom_item_xpath` as the repeated item pattern when available, and `field.value_attribute` to specify whether extraction should read `href`, `text`, or another node attribute.
+- `name` is the template name.
+- `description` is the detailed description of the template.
+- `dataPageTemplate` is a JSON string. Its `baseUrl` must be the page URL where the selected data source was observed.
+- `dataSourceTemplate` is a JSON string. It stores the request matching rule and the target field extraction expression.
+- `status` must always be `AVAILABLE`.
+- `testResult` must always be `SUCCESS`.
+- `requestTemplate.targetUrlExpression` must be a regular expression string that matches the request URL carrying the target data.
+- `requestTemplate.targetUrlType` should be `REGX`.
+- For JSON responses, use `resolver.type` = `JSON_PATH` and do not include `requestTemplate.ignoreResponse`.
+- If the target data comes from HTML, `responseTemplate.resolver.expression` must be an XPath expression.
+- Otherwise, `responseTemplate.resolver.expression` must be a JSON path expression.
+- For HTML-derived extraction, `requestTemplate` must include `"ignoreResponse": false`.
+- `dataSourceTemplate` should describe only the selected target-field source, not all alternatives.
+- `baseUrl` should use the actual page URL, not just the original site entry URL, when the selected evidence was observed on a later page.
