@@ -2,7 +2,7 @@
 
 Browser-driven template discovery for sites that expose useful data through XHR or `fetch`.
 
-This repository currently includes the `web-template-capture` skill. It opens a site in Playwright, lets the user log in manually when needed, captures network responses and DOM snapshots, ranks likely request/field candidates, and emits a template draft.
+This repository currently includes the `web-template-capture` skill. It opens a site in Playwright, waits only for manual login when needed, then explores the site automatically, captures network responses and DOM snapshots, ranks likely request/field candidates, and emits a template draft.
 
 ## Requirements
 
@@ -41,7 +41,7 @@ Capture a browsing session:
 npm run capture:site -- \
   --site-url https://x.com/home \
   --target-field-name username \
-  --navigation-hint "Log in, then open the page containing the target field."
+  --navigation-hint "Log in if needed, then wait while the script explores automatically."
 ```
 
 Analyze candidates:
@@ -81,5 +81,6 @@ The target field is the logged-in username.
 
 - `artifacts/` contains captured responses and DOM snapshots and is ignored by Git.
 - The capture script uses a persistent browser profile so login state can be reused.
-- In auto-explore mode, if the script detects a login page, it pauses and waits for manual login instead of closing immediately.
+- Auto-exploration is the default mode. If the script detects a login page, it pauses and waits for manual login instead of closing immediately.
+- Use `--manual-capture` only if you want to drive the browser yourself after login.
 - Some sites still require manual judgment. The top-ranked candidate is a recommendation, not a guarantee.

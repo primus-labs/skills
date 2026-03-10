@@ -1,13 +1,13 @@
 ---
 name: web-template-capture
-description: Prepare template drafts for browser-based websites by opening the site in Playwright, letting the user log in manually, capturing network and DOM data, ranking candidate fields for any target value, and emitting a reusable template draft. Use when the user wants to create a template for a website, prove current-account ownership, or discover request URLs and JSON paths behind a page.
+description: Prepare template drafts for browser-based websites by opening the site in Playwright, waiting only for manual login when needed, then automatically exploring pages, capturing network and DOM data, ranking candidate fields for any target value, and emitting a reusable template draft. Use when the user wants to create a template for a website, prove current-account ownership, or discover request URLs and JSON paths behind a page.
 ---
 
 # Web Template Capture
 
-Use this skill when the user wants a template for any browser-visible field such as username, email, balance, membership tier, order number, KYC status, or page-specific records.
+Use this skill when the user wants a template for any browser-visible field such as username, email, balance, membership tier, order number, KYC status, or page-specific records and lists.
 
-This skill is intentionally scoped to websites that can be explored in a browser and expose useful data through XHR or `fetch`, or at least render the value in the DOM. It is not a promise that every site can be automated end to end.
+This skill is intentionally scoped to websites that can be explored in a browser and expose useful data through XHR or `fetch`, or at least render the value in the DOM. If the field only exists in rendered HTML, emit the page HTML request URL and the matching DOM XPath instead of pretending a JSON API exists. It is not a promise that every site can be automated end to end.
 
 ## Inputs
 
@@ -26,8 +26,8 @@ Known sample values make the ranking much stronger. If the user does not know th
 ## Workflow
 
 1. Run `scripts/capture_site.mjs` to open a persistent Chrome window and capture responses plus DOM snapshots.
-2. If the field is hidden behind a tab, accordion, or clickable card, prefer target-aware auto-exploration with `--auto-explore`, `--target-field-name`, and `--target-keywords`.
-3. Let the user log in manually, navigate to the page containing the target field, then close the browser window. If auto-explore is enabled, the script can close on its own after click exploration finishes, but if it detects a login page it should pause exploration and wait for manual login instead of auto-closing.
+2. By default, `scripts/capture_site.mjs` should run in target-aware auto-exploration mode. The user should only need to log in manually if required.
+3. After login, do not ask the user to navigate further unless the site blocks automation. The script should continue exploring likely tabs, cards, and detail links on its own. If it detects a login page it should pause exploration and wait for manual login, then resume automatically.
 4. Run `scripts/find_candidates.mjs` against the saved session.
 5. If the top candidates are ambiguous, read [references/ranking_rules.md](references/ranking_rules.md) and prefer the most direct data source.
 6. Run `scripts/emit_template.mjs` to generate a template draft from the candidate report.
@@ -43,6 +43,8 @@ When presenting or emitting a template, treat `Source URL` as the page URL that 
 - Prefer endpoints whose URL or operation name semantically matches the target field or entity.
 - Do not treat GraphQL hash segments as stable. Match on operation name or path suffix instead.
 - Treat DOM-only matches as a fallback and label them clearly as less stable than direct network data.
+- For HTML-only matches, set the request URL to the page's document URL and include the DOM XPath that exposed the value.
+- For list-like DOM fields such as connections, orders, followers, or transactions, prefer a repeated-node XPath for the full list plus the value attribute to read, rather than a single-node absolute XPath.
 
 ## Script Usage
 
@@ -52,21 +54,17 @@ Capture:
 node web-template-capture/scripts/capture_site.mjs \
   --site-url https://x.com/home \
   --target-field-name username \
-  --navigation-hint "Log in, then open the page containing the target field."
+  --navigation-hint "Log in if needed, then wait while the script explores automatically."
 ```
 
-Capture with automatic click exploration:
+Capture with the legacy manual mode:
 
 ```bash
 node web-template-capture/scripts/capture_site.mjs \
   --site-url https://example.com/app \
-  --auto-explore \
+  --manual-capture \
   --target-field-name "30天交易量" \
-  --target-keywords "30天,交易量,成交量,BTC成交量,费率等级,VIP" \
-  --login-wait-ms 600000 \
-  --max-clicks 8 \
-  --settle-ms 2500 \
-  --navigation-hint "Log in if needed. The script will click visible controls to discover the request."
+  --navigation-hint "Log in if needed, then navigate manually to the page containing the target field."
 ```
 
 Analyze:
@@ -102,9 +100,22 @@ The scripts emit:
 
 - `session.json`: high-level capture metadata
 - `responses/`: captured network payloads
-- `dom/`: DOM snapshots
+- `dom/`: DOM snapshots plus metadata with visible-node XPath catalog
 - `interactions`: per-click action records with response deltas in `session.json`
 - `candidate-report.json`: ranked field candidates
 - `template-draft.json`: normalized template draft with the selected candidate plus alternative summaries
 
-If a site is heavily protected, only uses HTML, or relies on WebSocket or protobuf data, say that explicitly and stop short of claiming a stable template exists.
+For list-like HTML fields, `template-draft.json` should prefer:
+
+- a list XPath in `field.dom_xpath`
+- an item pattern in `field.dom_item_xpath` when available
+- a `field.value_attribute` such as `href` or `text`
+- `sample_value` as an array of example extracted values
+
+If a site is heavily protected, only uses HTML, or relies on WebSocket or protobuf data, say that explicitly. For HTML-only matches, return the document URL and DOM XPath; if even that is ambiguous, stop short of claiming a stable template exists.
+
+## Default Behavior
+
+- Treat auto-exploration as the default mode.
+- Ask the user only to complete login or captcha steps that cannot be automated safely.
+- Use `--manual-capture` only when the user explicitly wants to drive navigation themselves or when automated exploration is clearly unsafe.

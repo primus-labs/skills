@@ -15,7 +15,6 @@ const DANGEROUS_TERMS = [
   "disable",
   "deactivate",
   "api management",
-  "security settings",
   "save",
   "submit",
   "confirm",
@@ -26,6 +25,13 @@ const SAFE_DISCOVERY_TERMS = [
   "details",
   "detail",
   "overview",
+  "email",
+  "emails",
+  "account",
+  "preferences",
+  "privacy",
+  "sign in",
+  "security",
   "tab",
   "expand",
   "show",
@@ -164,13 +170,18 @@ async function main() {
   const profileDir = args["profile-dir"] || path.join(os.homedir(), ".codex-playwright", "web-template-capture", siteSlug);
   const autoCloseMs = args["auto-close-ms"] ? Number(args["auto-close-ms"]) : null;
   const loginWaitMs = args["login-wait-ms"] ? Number(args["login-wait-ms"]) : 10 * 60 * 1000;
-  const autoExplore = Boolean(args["auto-explore"]);
+  const manualCapture = Boolean(args["manual-capture"]);
+  const autoExplore = !manualCapture;
   const maxClicks = args["max-clicks"] ? Number(args["max-clicks"]) : 8;
   const settleMs = args["settle-ms"] ? Number(args["settle-ms"]) : 2500;
   const targetFieldName = args["target-field-name"] || "";
   const targetKeywords = args["target-keywords"] || "";
   const targetHintValue = args["target-hint-value"] || "";
-  const navigationHint = args["navigation-hint"] || "Log in if needed, navigate to the page containing the target field, then close the browser window.";
+  const navigationHint = args["navigation-hint"] || (
+    autoExplore
+      ? "Log in if needed, then wait. The script will continue exploring automatically and close the browser when it finishes."
+      : "Log in if needed, navigate to the page containing the target field, then close the browser window."
+  );
   const targetProfile = buildTargetProfile({
     fieldName: targetFieldName,
     targetKeywords,
@@ -201,7 +212,7 @@ async function main() {
     console.log(`Target phrases: ${targetProfile.phrases.join(", ") || "(none)"}`);
   }
   if (autoExplore) {
-    console.log(`Auto-explore enabled. Max clicks: ${maxClicks}. Settle time: ${settleMs} ms.`);
+    console.log(`Auto-explore enabled by default. Max clicks: ${maxClicks}. Settle time: ${settleMs} ms.`);
   }
   if (autoExplore) {
     console.log(`Login wait timeout: ${loginWaitMs} ms.`);
@@ -411,6 +422,163 @@ async function main() {
       .sort((left, right) => right.score - left.score);
   }
 
+  async function listDomCatalog() {
+    return page.evaluate(() => {
+      const clean = (value) => (value || "").replace(/\s+/g, " ").trim();
+      const isVisible = (element) => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.visibility !== "hidden" &&
+          style.display !== "none" &&
+          rect.width > 0 &&
+          rect.height > 0;
+      };
+      const buildSelector = (element) => {
+        if (!(element instanceof HTMLElement)) {
+          return null;
+        }
+        if (element.id) {
+          return `#${CSS.escape(element.id)}`;
+        }
+        const dataTestId = element.getAttribute("data-testid");
+        if (dataTestId) {
+          return `[data-testid="${CSS.escape(dataTestId)}"]`;
+        }
+        if (element instanceof HTMLAnchorElement && element.getAttribute("href")) {
+          return `a[href="${CSS.escape(element.getAttribute("href"))}"]`;
+        }
+
+        const parts = [];
+        let current = element;
+        while (current && current.tagName && current !== document.body) {
+          const tag = current.tagName.toLowerCase();
+          const parent = current.parentElement;
+          if (!parent) {
+            break;
+          }
+          const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
+          const index = siblings.indexOf(current) + 1;
+          parts.unshift(`${tag}:nth-of-type(${index})`);
+          current = parent;
+        }
+        return parts.length > 0 ? parts.join(" > ") : null;
+      };
+      const buildXPath = (element) => {
+        if (!(element instanceof Element)) {
+          return null;
+        }
+        if (element.id) {
+          return `//*[@id=${JSON.stringify(element.id)}]`;
+        }
+        const segments = [];
+        let current = element;
+        while (current && current.nodeType === Node.ELEMENT_NODE) {
+          const tag = current.tagName.toLowerCase();
+          const parent = current.parentElement;
+          if (!parent) {
+            segments.unshift(tag);
+            break;
+          }
+          const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
+          const index = siblings.indexOf(current) + 1;
+          segments.unshift(`${tag}[${index}]`);
+          current = parent;
+        }
+        return `/${segments.join("/")}`;
+      };
+      const xpathPattern = (xpath) => String(xpath || "").replace(/\[\d+\]/g, "[*]");
+      const hasMeaningfulChild = (element) => Array.from(element.children).some((child) => {
+        if (!(child instanceof HTMLElement) || !isVisible(child)) {
+          return false;
+        }
+        return clean(child.innerText || child.textContent || "").length > 0;
+      });
+
+      const selector = [
+        "a[href]",
+        "button",
+        "[role='button']",
+        "[role='tab']",
+        "[aria-label]",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "li",
+        "[role='listitem']",
+        "td",
+        "th",
+        "dt",
+        "dd",
+        "p",
+        "span",
+        "div"
+      ].join(", ");
+
+      const seen = new Set();
+      const entries = [];
+      const nodes = Array.from(document.querySelectorAll(selector));
+      for (const element of nodes) {
+        if (!(element instanceof HTMLElement) || !isVisible(element)) {
+          continue;
+        }
+
+        const tag = element.tagName.toLowerCase();
+        const text = clean(element.innerText || element.textContent || "");
+        const href = element instanceof HTMLAnchorElement ? element.href : "";
+        const ariaLabel = clean(element.getAttribute("aria-label"));
+        const title = clean(element.getAttribute("title"));
+        const role = clean(element.getAttribute("role"));
+        const dataViewName = clean(element.getAttribute("data-view-name"));
+        const dataTestId = clean(element.getAttribute("data-testid"));
+        const selectorValue = buildSelector(element);
+        const xpath = buildXPath(element);
+        const contextRoot = element.closest("li, tr, article, section, [role=listitem], [role=row], .card, [class*=card], [class*=panel]") || element.parentElement;
+        const contextText = clean(contextRoot?.innerText || "").slice(0, 320);
+        const interactiveDescendant = element.querySelector("a[href], button, [role='button'], [role='tab']");
+
+        if (!xpath || !selectorValue) {
+          continue;
+        }
+        if (!text && !href && !ariaLabel && !title) {
+          continue;
+        }
+        if (text.length > 240) {
+          continue;
+        }
+        if ((tag === "div" || tag === "span" || tag === "p") && hasMeaningfulChild(element)) {
+          continue;
+        }
+        if ((tag === "li" || role === "listitem") && interactiveDescendant && !href) {
+          continue;
+        }
+
+        const dedupeKey = [xpath, text, href, ariaLabel, title].join("|");
+        if (seen.has(dedupeKey)) {
+          continue;
+        }
+        seen.add(dedupeKey);
+
+        entries.push({
+          xpath,
+          xpath_pattern: xpathPattern(xpath),
+          selector: selectorValue,
+          tag,
+          role,
+          text,
+          href,
+          aria_label: ariaLabel,
+          title,
+          data_view_name: dataViewName,
+          data_test_id: dataTestId,
+          context_text: contextText
+        });
+      }
+
+      return entries.slice(0, 250);
+    });
+  }
+
   async function saveDomSnapshot(reason) {
     try {
       const pageUrl = page.url();
@@ -424,6 +592,7 @@ async function main() {
       const htmlPath = path.join(domDir, htmlName);
       const metaPath = path.join(domDir, metaName);
       const clickCandidates = await listClickableCandidates();
+      const domCatalog = await listDomCatalog();
       const [html, title, text] = await Promise.all([
         page.content(),
         page.title().catch(() => ""),
@@ -443,7 +612,8 @@ async function main() {
           href: candidate.href,
           score: candidate.score,
           reasons: candidate.reasons
-        }))
+        })),
+        dom_catalog: domCatalog
       }, null, 2));
 
       session.dom_snapshots.push({

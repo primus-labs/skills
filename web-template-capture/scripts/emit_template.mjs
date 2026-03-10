@@ -40,6 +40,9 @@ function buildCandidateSummary(candidate, index, topCandidate) {
     operation_name: candidate.operation_name || null,
     json_path: candidate.json_path || null,
     dom_selector: candidate.dom_selector || null,
+    dom_xpath: candidate.dom_xpath || null,
+    dom_item_xpath: candidate.dom_item_xpath || null,
+    value_attribute: candidate.value_attribute || null,
     sample_value: candidate.sample_value,
     score: candidate.score,
     why_not_top: whyNotTop
@@ -82,6 +85,9 @@ async function main() {
     field: {
       json_path: candidate.json_path || null,
       dom_selector: candidate.dom_selector || null,
+      dom_xpath: candidate.dom_xpath || null,
+      dom_item_xpath: candidate.dom_item_xpath || null,
+      value_attribute: candidate.value_attribute || null,
       sample_value: candidate.sample_value
     },
     stability: {
@@ -91,6 +97,8 @@ async function main() {
     alternatives,
     notes: [
       candidate.request_url ? `Observed request: ${candidate.request_url}` : "Observed in DOM snapshot only",
+      candidate.dom_xpath ? `Observed DOM XPath: ${candidate.dom_xpath}` : "No DOM XPath recorded for this candidate",
+      candidate.value_attribute ? `Read extracted value from: ${candidate.value_attribute}` : "No explicit DOM value attribute recorded",
       sourceUrl ? `Observed while on page: ${sourceUrl}` : "No page URL recorded for this candidate",
       candidate.file ? `Evidence file: ${candidate.file}` : "No evidence file recorded"
     ]
