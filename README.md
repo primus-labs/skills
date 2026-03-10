@@ -31,6 +31,35 @@ cp -R web-template-capture ~/.codex/skills/web-template-capture
 
 After that, restart the IDE or open a new chat so the skill is discovered.
 
+## Run Through The Skill
+
+After installing the skill into `~/.codex/skills`, invoke it in Codex with a goal-oriented prompt.
+
+Recommended target prompt pattern:
+
+```text
+Use Web Template Capture to prepare a template for <site_url>.
+The target field is <field_name>.
+```
+
+If you already know a sample value, include it in the prompt. This makes ranking much more reliable.
+
+Recommended prompt pattern with a sample field value:
+
+```text
+Use Web Template Capture to prepare a template for <site_url>.
+The target field is <field_name>.
+The known sample value is <sample_value>.
+```
+
+Examples:
+
+```text
+Use Web Template Capture to prepare a template for https://x.com/home.
+The target field is the logged-in username.
+The known sample value is fksyuan@163.com.
+```
+
 ## Run Without The IDE
 
 You can also run the scripts directly from the repository.
@@ -60,21 +89,6 @@ Emit a template draft:
 ```bash
 npm run emit:template -- \
   --report artifacts/x_com/<session-id>/candidate-report.json
-```
-
-## Run Through The Skill
-
-After installing the skill into `~/.codex/skills`, you can invoke it in Codex with a prompt like:
-
-```text
-Use Web Template Capture to prepare a template for https://www.binance.com/en/my/dashboard. The target field is 30-day trading volume.
-```
-
-Or:
-
-```text
-Use $web-template-capture to prepare a template for https://x.com/home.
-The target field is the logged-in username.
 ```
 
 ## Notes
