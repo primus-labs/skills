@@ -9,7 +9,7 @@ Each skill should be self-contained when possible. Runtime dependencies, setup s
 If your IDE supports prompt-based skill installation, use:
 
 ```text
-Install the <skill_name> skill from this repository and set up its dependencies.
+Set up the <skill_name> skill from https://github.com/primus-labs/skills.git, install its dependencies, and verify it with the doctor script.
 ```
 
 If local fallback setup is needed:
