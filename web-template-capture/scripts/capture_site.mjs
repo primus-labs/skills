@@ -1,7 +1,44 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { chromium } from "playwright";
+
+async function loadChromium() {
+  try {
+    const playwright = await import("playwright");
+    return playwright.chromium;
+  } catch {
+    throw new Error("Playwright is not installed. Run `npm install` and `npx playwright install chromium` inside web-template-capture.");
+  }
+}
+
+async function launchPersistentBrowser(chromium, profileDir) {
+  const baseOptions = {
+    headless: false,
+    viewport: { width: 1440, height: 960 },
+    args: ["--disable-blink-features=AutomationControlled"]
+  };
+
+  try {
+    const context = await chromium.launchPersistentContext(profileDir, {
+      ...baseOptions,
+      channel: "chrome"
+    });
+    console.log("Browser runtime: Chrome");
+    return context;
+  } catch (chromeError) {
+    console.warn(`Chrome launch failed, falling back to Playwright Chromium: ${chromeError.message.split("\n")[0]}`);
+  }
+
+  try {
+    const context = await chromium.launchPersistentContext(profileDir, baseOptions);
+    console.log("Browser runtime: Playwright Chromium");
+    return context;
+  } catch (chromiumError) {
+    throw new Error(
+      `Unable to launch a browser. Run \`npx playwright install chromium\` or install Google Chrome locally. Last error: ${chromiumError.message.split("\n")[0]}`
+    );
+  }
+}
 
 const CLICKABLE_SELECTOR = 'button, a[href], [role="button"], [role="tab"], [aria-controls], [data-testid]';
 const DANGEROUS_TERMS = [
@@ -162,7 +199,7 @@ async function main() {
   const parsedSiteUrl = new URL(siteUrl);
   const siteSlug = slugify(parsedSiteUrl.hostname);
   const sessionId = new Date().toISOString().replace(/[:.]/g, "-");
-  const outputRoot = args["output-root"] || path.join(process.cwd(), "artifacts");
+  const outputRoot = args["output-root"] || path.join(os.homedir(), ".web-template-capture", "artifacts");
   const sessionDir = path.join(outputRoot, siteSlug, sessionId);
   const responsesDir = path.join(sessionDir, "responses");
   const domDir = path.join(sessionDir, "dom");
@@ -225,12 +262,8 @@ async function main() {
   }
   console.log(`Session directory: ${sessionDir}`);
 
-  const context = await chromium.launchPersistentContext(profileDir, {
-    headless: false,
-    channel: "chrome",
-    viewport: { width: 1440, height: 960 },
-    args: ["--disable-blink-features=AutomationControlled"]
-  });
+  const chromium = await loadChromium();
+  const context = await launchPersistentBrowser(chromium, profileDir);
   const page = context.pages()[0] ?? (await context.newPage());
   let contextClosed = false;
   context.on("close", () => {

@@ -1,0 +1,20 @@
+{
+  "name": "web-template-capture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "install:codex": "node scripts/install_skill.mjs",
+    "capture:site": "node scripts/capture_site.mjs",
+    "find:candidates": "node scripts/find_candidates.mjs",
+    "emit:template": "node scripts/emit_template.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0"
+  }
+}

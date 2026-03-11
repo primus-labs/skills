@@ -1,100 +1,53 @@
 # template-bot
 
-Browser-driven template discovery for sites that expose useful data through XHR or `fetch`.
+A repository of installable skills for Codex, Cursor, Claude Code, and compatible AI IDEs.
 
-This repository currently includes the `web-template-capture` skill. It opens a site in Playwright, waits only for manual login when needed, then explores the site automatically, captures network responses and DOM snapshots, ranks likely request/field candidates, and emits a template draft.
+Each skill should be self-contained when possible. Runtime dependencies, setup scripts, and troubleshooting commands should live inside the skill directory rather than the repository root.
 
-## Requirements
+## Install A Skill
 
-- Node.js 18+
-- Google Chrome installed locally
-- A Codex-compatible AI IDE if you want to invoke the skill by name
+If your IDE supports prompt-based skill installation, use:
 
-## Install
+```text
+Install the <skill_name> skill from this repository and set up its dependencies.
+```
 
-Clone the repository and install dependencies:
+If local fallback setup is needed:
 
 ```bash
 git clone https://github.com/primus-labs/template-bot.git
-cd template-bot
-npm install
+cd template-bot/<skill-folder>
+npm run setup
+npm run doctor
 ```
 
-## Install The Skill In Codex
+## Skills
 
-If you want to call the skill from Codex or another compatible AI IDE, copy the skill folder into your Codex skills directory:
+| Skill | Description | Path | Runtime | Use prompt |
+| --- | --- | --- | --- | --- |
+| `web-template-capture` | Browser-driven template discovery for fields exposed through network responses or rendered DOM. | `web-template-capture/` | Node.js + Playwright | `Use Web Template Capture to prepare a template for <site_url>. The target field is <field_name>. The known sample value is <sample_value>.` |
 
-```bash
-mkdir -p ~/.codex/skills
-cp -R web-template-capture ~/.codex/skills/web-template-capture
-```
+Each skill directory is expected to contain its own `SKILL.md`. If the skill has runtime dependencies, prefer keeping a local `package.json` inside that skill folder.
 
-After that, restart the IDE or open a new chat so the skill is discovered.
+## Common Runtime Conventions
 
-## Run Through The Skill
+- Skill artifacts should default to user-level data directories, not repository directories.
+- `web-template-capture` stores captured session data under `~/.web-template-capture/artifacts/`.
+- Skills that need persistent browser state should store it outside the repository.
+- Do not commit generated artifacts, browser profiles, or session data.
 
-After installing the skill into `~/.codex/skills`, invoke it in Codex with a goal-oriented prompt.
+## Repository Conventions
 
-Recommended target prompt pattern:
+- Keep the repository root lightweight and skill-agnostic.
+- Put user-facing workflow details inside each skill directory.
+- Prefer `setup` and `doctor` scripts for skills with external dependencies.
+- Keep root documentation focused on discovery, installation, and shared conventions.
 
-```text
-Use Web Template Capture to prepare a template for <site_url>.
-The target field is <field_name>.
-```
+## Contributing
 
-If you already know a sample value, include it in the prompt. This makes ranking much more reliable.
+When adding a new skill:
 
-Recommended prompt pattern with a sample field value:
-
-```text
-Use Web Template Capture to prepare a template for <site_url>.
-The target field is <field_name>.
-The known sample value is <sample_value>.
-```
-
-Examples:
-
-```text
-Use Web Template Capture to prepare a template for https://x.com/home.
-The target field is the logged-in username.
-The known sample value is fksyuan@163.com.
-```
-
-## Run Without The IDE
-
-You can also run the scripts directly from the repository.
-
-Capture a browsing session:
-
-```bash
-npm run capture:site -- \
-  --site-url https://x.com/home \
-  --target-field-name username \
-  --navigation-hint "Log in if needed, then wait while the script explores automatically."
-```
-
-Analyze candidates:
-
-```bash
-npm run find:candidates -- \
-  --session artifacts/x_com/<session-id> \
-  --field-name username \
-  --field-type string \
-  --hint-value wenjun_yuan1 \
-  --ownership-mode current_user
-```
-
-Emit a template draft:
-
-```bash
-npm run emit:template -- \
-  --report artifacts/x_com/<session-id>/candidate-report.json
-```
-
-## Notes
-
-- `artifacts/` contains captured responses and DOM snapshots and is ignored by Git.
-- The capture script uses a persistent browser profile so login state can be reused.
-- Auto-exploration is the default mode. If the script detects a login page, it pauses and waits for manual login instead of closing immediately.
-- Use `--manual-capture` only if you want to drive the browser yourself after login.
-- Some sites still require manual judgment. The top-ranked candidate is a recommendation, not a guarantee.
+1. Create a dedicated skill directory.
+2. Add a `SKILL.md` with clear trigger and workflow instructions.
+3. Add self-contained setup and diagnostics when the skill depends on external runtimes or tools.
+4. Update the Skills table in this README.

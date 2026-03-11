@@ -9,6 +9,13 @@ Use this skill when the user wants a template for any browser-visible field such
 
 This skill is intentionally scoped to websites that can be explored in a browser and expose useful data through XHR or `fetch`, or at least render the value in the DOM. If the field only exists in rendered HTML, emit the page HTML request URL and the matching DOM XPath instead of pretending a JSON API exists. It is not a promise that every site can be automated end to end.
 
+If the user asks to install this skill in Codex, Cursor, Claude Code, or another compatible IDE, treat installation as:
+
+1. Copy or install the `web-template-capture` folder into the IDE's skill directory.
+2. Run `npm run setup` inside the installed skill directory.
+3. If setup was already run before or the user reports issues, run `npm run doctor`.
+4. Tell the user to open a new chat or reload the IDE only after setup succeeds.
+
 ## Inputs
 
 Collect these inputs before running scripts:
@@ -25,6 +32,7 @@ Known sample values make the ranking much stronger. If the user does not know th
 
 ## Workflow
 
+0. If the skill package has not been prepared yet, run `npm run setup` from the `web-template-capture` directory. If a user reports startup or browser issues, run `npm run doctor` there before retrying.
 1. Run `scripts/capture_site.mjs` to open a persistent Chrome window and capture responses plus DOM snapshots.
 2. By default, `scripts/capture_site.mjs` should run in target-aware auto-exploration mode. The user should only need to log in manually if required.
 3. After login, do not ask the user to navigate further unless the site blocks automation. The script should continue exploring likely tabs, cards, and detail links on its own. If it detects a login page it should pause exploration and wait for manual login, then resume automatically.
@@ -48,10 +56,24 @@ When presenting or emitting a template, treat `Source URL` as the page URL that 
 
 ## Script Usage
 
+First-time setup:
+
+```bash
+cd web-template-capture
+npm run setup
+```
+
+Environment check:
+
+```bash
+cd web-template-capture
+npm run doctor
+```
+
 Capture:
 
 ```bash
-node web-template-capture/scripts/capture_site.mjs \
+cd web-template-capture && node scripts/capture_site.mjs \
   --site-url https://x.com/home \
   --target-field-name username \
   --navigation-hint "Log in if needed, then wait while the script explores automatically."
@@ -60,7 +82,7 @@ node web-template-capture/scripts/capture_site.mjs \
 Capture with the legacy manual mode:
 
 ```bash
-  node web-template-capture/scripts/capture_site.mjs \
+cd web-template-capture && node scripts/capture_site.mjs \
   --site-url https://example.com/app \
   --manual-capture \
   --target-field-name "30-day trading volume" \
@@ -70,8 +92,8 @@ Capture with the legacy manual mode:
 Analyze:
 
 ```bash
-node web-template-capture/scripts/find_candidates.mjs \
-  --session artifacts/x_com/<session-id> \
+cd web-template-capture && node scripts/find_candidates.mjs \
+  --session ~/.web-template-capture/artifacts/x_com/<session-id> \
   --field-name username \
   --field-type string \
   --hint-value wenjun_yuan1 \
@@ -81,15 +103,15 @@ node web-template-capture/scripts/find_candidates.mjs \
 Emit template draft:
 
 ```bash
-node web-template-capture/scripts/emit_template.mjs \
-  --report artifacts/x_com/<session-id>/candidate-report.json
+cd web-template-capture && node scripts/emit_template.mjs \
+  --report ~/.web-template-capture/artifacts/x_com/<session-id>/candidate-report.json
 ```
 
 Emit a specific candidate or include more backup summaries:
 
 ```bash
-node web-template-capture/scripts/emit_template.mjs \
-  --report artifacts/x_com/<session-id>/candidate-report.json \
+cd web-template-capture && node scripts/emit_template.mjs \
+  --report ~/.web-template-capture/artifacts/x_com/<session-id>/candidate-report.json \
   --index 1 \
   --alternatives 5
 ```
