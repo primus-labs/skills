@@ -1,4 +1,4 @@
-# template-bot
+# Primus Skills
 
 A repository of installable skills for Codex, Cursor, Claude Code, and compatible AI IDEs.
 
