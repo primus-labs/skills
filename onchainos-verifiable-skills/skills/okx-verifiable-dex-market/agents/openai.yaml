@@ -1,0 +1,7 @@
+interface:
+  display_name: "OKX Verifiable DEX Market"
+  short_description: "Produce Primus-backed verifiable market data calls."
+  default_prompt: "Use $okx-verifiable-dex-market with $primus-zktls-core-sdk to turn suitable OKX OnchainOS-style market price, K-line, and index-price requests into verifiable API calls."
+
+policy:
+  allow_implicit_invocation: true

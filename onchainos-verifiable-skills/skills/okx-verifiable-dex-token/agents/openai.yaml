@@ -1,0 +1,7 @@
+interface:
+  display_name: "OKX Verifiable DEX Token"
+  short_description: "Produce Primus-backed verifiable token data calls."
+  default_prompt: "Use $okx-verifiable-dex-token with $primus-zktls-core-sdk to turn suitable OKX OnchainOS-style token search, token metadata, ranking, and safety queries into verifiable API calls."
+
+policy:
+  allow_implicit_invocation: true
