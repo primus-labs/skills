@@ -468,6 +468,25 @@ Primus publishes deployed contract addresses for multiple EVM chains. Current ad
 
 When writing integration guidance, prefer referencing the deployed Primus contract for the user's target chain instead of assuming they must deploy their own verifier first.
 
+### Example: choose the Primus contract by chain
+
+```ts
+const primusAddressByChain: Record<string, string> = {
+  "base": "0xCE7cefB3B5A7eB44B59F60327A53c9Ce53B0afdE",
+  "base-sepolia": "0xCE7cefB3B5A7eB44B59F60327A53c9Ce53B0afdE",
+  "arbitrum": "0x982Cef8d9F184566C2BeC48c4fb9b6e7B0b4A58B",
+  "scroll": "0x06c3c00dc556d2493A661E6a929d3E17f5F097a4",
+  "scroll-sepolia": "0x5267380F548EEcA48E57Cd468a66F846e1dEfD6e",
+  "okx": "0xCE7cefB3B5A7eB44B59F60327A53c9Ce53B0afdE",
+  "okx-testnet": "0xCE7cefB3B5A7eB44B59F60327A53c9Ce53B0afdE"
+};
+
+const chainKey = isTestnet ? "base-sepolia" : "base";
+const primusAddress = primusAddressByChain[chainKey];
+```
+
+Then pass `primusAddress` into your verifier contract constructor, or use it directly when calling `IPrimusZKTLS(primusAddress).verifyAttestation(attestation)`.
+
 ### What `PrimusZKTLS.verifyAttestation()` checks
 
 From the contract implementation:
