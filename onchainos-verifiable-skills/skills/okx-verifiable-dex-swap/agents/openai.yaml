@@ -1,0 +1,7 @@
+interface:
+  display_name: "OKX Verifiable DEX Swap"
+  short_description: "Plan or produce partial verifiable swap quotes."
+  default_prompt: "Use $okx-verifiable-dex-swap with $primus-zktls-core-sdk to turn suitable OKX OnchainOS-style quote and liquidity queries into verifiable API calls, while keeping transaction generation and execution outside the proof scope."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "OKX Verifiable Onchain Gateway"
+  short_description: "Plan or produce partial verifiable gateway snapshots."
+  default_prompt: "Use $okx-verifiable-onchain-gateway with $primus-zktls-core-sdk to assess or build verifiable API calls for suitable OKX OnchainOS-style gateway metadata, gas, and simulation queries, but not for transaction broadcast confirmation."
+
+policy:
+  allow_implicit_invocation: true
