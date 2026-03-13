@@ -1,0 +1,7 @@
+interface:
+  display_name: "Primus zkTLS Core SDK"
+  short_description: "Explain and apply Primus zkTLS Core SDK workflows."
+  default_prompt: "Use $primus-zktls-core-sdk to help integrate @primuslabs/zktls-core-sdk, build attestation requests, verify proofs locally, and verify attestations on-chain with zktls-contracts."
+
+policy:
+  allow_implicit_invocation: true
