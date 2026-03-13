@@ -25,6 +25,7 @@ npm run doctor
 
 | Skill | Description | Path | Runtime | Use prompt |
 | --- | --- | --- | --- | --- |
+| `primus-zktls-core-sdk` | Integration guide for Primus zkTLS Core SDK, including SDK calls, attestation generation, local verification, and Solidity on-chain verification with `zktls-contracts`. | `primus-zktls-core-sdk/` | Documentation only | `Use Primus zkTLS Core SDK to explain how to build a request, generate an attestation, and verify it on-chain.` |
 | `web-template-capture` | Browser-driven template discovery for fields exposed through network responses or rendered DOM. | `web-template-capture/` | Node.js + Playwright | `Use Web Template Capture to prepare a template for <site_url>. The target field is <field_name>. The known sample value is <sample_value>.` |
 
 Each skill directory is expected to contain its own `SKILL.md`. If the skill has runtime dependencies, prefer keeping a local `package.json` inside that skill folder.
