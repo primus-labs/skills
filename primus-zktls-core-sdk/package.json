@@ -1,0 +1,13 @@
+{
+  "name": "primus-zktls-core-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "test": "node scripts/doctor.mjs"
+  }
+}
