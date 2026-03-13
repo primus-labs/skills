@@ -37,6 +37,8 @@ Use this skill when the user wants to integrate `@primuslabs/zktls-core-sdk`, un
 ## Working Rules
 
 - Default to `PrimusCoreTLS` as the main integration entrypoint.
+- Default all demos and quick-start examples to `proxytls`.
+- Do not proactively guide the user toward `mpctls` unless they explicitly ask for it or their scenario clearly requires it.
 - When documenting the SDK, distinguish clearly between:
   - SDK initialization
   - request/response description
@@ -75,6 +77,7 @@ Use this skill when the user wants to integrate `@primuslabs/zktls-core-sdk`, un
 - Import `IPrimusZKTLS` and `Attestation` from `@primuslabs/zktls-contracts/src/IPrimusZKTLS.sol`.
 - Consumer contracts usually only need to call `verifyAttestation(attestation)`.
 - If managing a `PrimusZKTLS` deployment, the owner must ensure valid attestors are configured with `setAttestor()`.
+- When the user asks for deployed contract addresses, use the current EVM address list documented by Primus in the on-chain interaction overview.
 
 ## Reference Files
 
