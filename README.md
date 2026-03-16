@@ -25,6 +25,7 @@ npm run doctor
 
 | Skill | Description | Path | Runtime | Use prompt |
 | --- | --- | --- | --- | --- |
+| `primus-zktls-js-sdk-dapp` | Build frontend DApps using `@primuslabs/zktls-js-sdk` (enterprise zkTLS). Supports test mode (frontend signing) and production mode (backend signing). No wallet/gas required for attestation generation. | `primus-zktls-js-sdk-dapp/` | Node.js + Vite | `Use the primus-zktls-js-sdk-dapp skill to scaffold a DApp that proves <what_to_prove>. The template ID is <template_id>. My appId is <app_id>.` |
 | `primus-zktls-core-sdk` | Integration guide for Primus zkTLS Core SDK, including SDK calls, attestation generation, local verification, and Solidity on-chain verification with `zktls-contracts`. | `primus-zktls-core-sdk/` | Node.js | `Use Primus zkTLS Core SDK to explain how to build a request, generate an attestation, and verify it on-chain.` |
 | `web-template-capture` | Browser-driven template discovery for fields exposed through network responses or rendered DOM. | `web-template-capture/` | Node.js + Playwright | `Use Web Template Capture to prepare a template for <site_url>. The target field is <field_name>. The known sample value is <sample_value>.` |
 
