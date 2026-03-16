@@ -1,0 +1,18 @@
+{
+  "name": "primus-zktls-js-sdk-dapp",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Skill: build a frontend DApp using @primuslabs/zktls-js-sdk (enterprise zkTLS)",
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs"
+  },
+  "references": {
+    "sdk": "https://github.com/primus-labs/zktls-js-sdk",
+    "demo": "https://github.com/primus-labs/zktls-demo",
+    "docs-overview": "https://docs.primuslabs.xyz/enterprise/zk-tls-sdk/overview",
+    "docs-test": "https://docs.primuslabs.xyz/enterprise/zk-tls-sdk/test",
+    "docs-production": "https://docs.primuslabs.xyz/enterprise/zk-tls-sdk/production",
+    "error-codes": "https://docs.primuslabs.xyz/enterprise/error-code",
+    "developer-hub": "https://dev.primuslabs.xyz"
+  }
+}
