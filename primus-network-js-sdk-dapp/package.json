@@ -1,0 +1,12 @@
+{
+  "name": "primus-network-js-sdk-dapp",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Skill: scaffold a Primus Network zkTLS DApp from a template ID",
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
