@@ -1,0 +1,7 @@
+interface:
+  display_name: "Binance Verifiable Margin Trading"
+  short_description: "Produce Primus-backed verifiable Binance Margin calls."
+  default_prompt: "Use $binance-verifiable-margin-trading with $primus-zktls-core-sdk to turn suitable Binance Margin Trading API queries into verifiable API calls."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Binance Verifiable Alpha"
+  short_description: "Produce Primus-backed verifiable Binance Alpha calls."
+  default_prompt: "Use $binance-verifiable-alpha with $primus-zktls-core-sdk to turn suitable Binance Alpha token-discovery requests into verifiable API calls."
+
+policy:
+  allow_implicit_invocation: true
