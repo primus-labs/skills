@@ -1,0 +1,7 @@
+interface:
+  display_name: "Binance Verifiable USDS Futures"
+  short_description: "Produce Primus-backed verifiable Binance USDS Futures calls."
+  default_prompt: "Use $binance-verifiable-derivatives-usds-futures with $primus-zktls-core-sdk to turn suitable Binance USDS Futures market-data requests into verifiable API calls."
+
+policy:
+  allow_implicit_invocation: true
