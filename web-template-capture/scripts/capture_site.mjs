@@ -184,6 +184,138 @@ function extractOperationName(url) {
   }
 }
 
+async function getWebsiteIcon(page) {
+  return page.evaluate(() => {
+    const resolveUrl = (value) => {
+      if (!value) {
+        return null;
+      }
+      try {
+        return new URL(value, document.baseURI).href;
+      } catch {
+        return null;
+      }
+    };
+    const clean = (value) => String(value || "").trim();
+    const parseSizesScore = (sizes) => {
+      const normalized = clean(sizes).toLowerCase();
+      if (!normalized) {
+        return 0;
+      }
+      if (normalized.includes("any")) {
+        return 120;
+      }
+      return normalized
+        .split(/\s+/)
+        .map((entry) => entry.match(/^(\d+)x(\d+)$/))
+        .filter(Boolean)
+        .reduce((best, match) => {
+          const width = Number(match[1]);
+          const height = Number(match[2]);
+          return Math.max(best, Math.min(width * height, 512 * 512));
+        }, 0);
+    };
+    const candidates = [];
+    const seen = new Set();
+
+    const pushCandidate = ({ href, source, rel = "", type = "", sizes = "" }) => {
+      const resolved = resolveUrl(href);
+      if (!resolved || seen.has(resolved)) {
+        return;
+      }
+      seen.add(resolved);
+      let score = 0;
+      const normalizedRel = clean(rel).toLowerCase();
+      const normalizedType = clean(type).toLowerCase();
+      if (normalizedRel.includes("icon") && normalizedRel.includes("apple-touch")) {
+        score += 90;
+      } else if (normalizedRel.includes("shortcut icon")) {
+        score += 100;
+      } else if (normalizedRel.includes("icon")) {
+        score += 110;
+      } else if (normalizedRel.includes("mask-icon")) {
+        score += 70;
+      } else if (source === "msapplication-TileImage") {
+        score += 55;
+      } else if (source === "og:image") {
+        score += 35;
+      }
+      if (normalizedType.includes("svg")) {
+        score += 8;
+      } else if (normalizedType.includes("png")) {
+        score += 6;
+      } else if (resolved.endsWith(".svg")) {
+        score += 8;
+      } else if (resolved.endsWith(".png")) {
+        score += 6;
+      } else if (resolved.endsWith(".ico")) {
+        score += 5;
+      }
+      score += Math.min(parseSizesScore(sizes) / 256, 24);
+      candidates.push({
+        url: resolved,
+        source,
+        rel: normalizedRel || null,
+        type: normalizedType || null,
+        sizes: clean(sizes) || null,
+        score
+      });
+    };
+
+    document.querySelectorAll("link[rel]").forEach((element) => {
+      const rel = clean(element.getAttribute("rel"));
+      if (!/icon/i.test(rel)) {
+        return;
+      }
+      pushCandidate({
+        href: element.getAttribute("href"),
+        source: "link",
+        rel,
+        type: element.getAttribute("type"),
+        sizes: element.getAttribute("sizes")
+      });
+    });
+
+    const ogImage = document.querySelector('meta[property="og:image"], meta[name="og:image"]');
+    if (ogImage) {
+      pushCandidate({
+        href: ogImage.getAttribute("content"),
+        source: "og:image"
+      });
+    }
+
+    const tileImage = document.querySelector('meta[name="msapplication-TileImage"]');
+    if (tileImage) {
+      pushCandidate({
+        href: tileImage.getAttribute("content"),
+        source: "msapplication-TileImage"
+      });
+    }
+
+    candidates.sort((left, right) => right.score - left.score);
+    const best = candidates[0] || {
+      url: new URL("/favicon.ico", window.location.origin).href,
+      source: "fallback",
+      rel: null,
+      type: null,
+      sizes: null,
+      score: 1
+    };
+    return {
+      website_icon: best.url,
+      website_icon_meta: {
+        source: best.source,
+        rel: best.rel,
+        type: best.type,
+        sizes: best.sizes
+      }
+    };
+  }).catch(() => ({
+    website_icon: null,
+    website_icon_meta: null
+  }));
+}
+
 function isLikelyLoginUrl(value) {
   const url = String(value || "");
   return LOGIN_URL_PATTERNS.some((pattern) => pattern.test(url));
@@ -236,6 +368,7 @@ async function main() {
     started_at: new Date().toISOString(),
     target: targetProfile,
     page_urls: [],
+    website_icons: [],
     response_count: 0,
     dom_snapshots: [],
     interactions: []
@@ -625,17 +758,22 @@ async function main() {
       const metaPath = path.join(domDir, metaName);
       const clickCandidates = await listClickableCandidates();
       const domCatalog = await listDomCatalog();
-      const [html, title, text] = await Promise.all([
+      const [html, title, text, iconInfo] = await Promise.all([
         page.content(),
         page.title().catch(() => ""),
-        page.locator("body").innerText().catch(() => "")
+        page.locator("body").innerText().catch(() => ""),
+        getWebsiteIcon(page)
       ]);
+      const websiteIcon = iconInfo?.website_icon || null;
+      const websiteIconMeta = iconInfo?.website_icon_meta || null;
 
       await fs.writeFile(htmlPath, html);
       await fs.writeFile(metaPath, JSON.stringify({
         reason,
         page_url: pageUrl,
         title,
+        website_icon: websiteIcon,
+        website_icon_meta: websiteIconMeta,
         text_excerpt: text.slice(0, 4000),
         top_click_candidates: clickCandidates.slice(0, 15).map((candidate) => ({
           selector: candidate.selector,
@@ -652,9 +790,23 @@ async function main() {
         page_url: pageUrl,
         title,
         reason,
+        website_icon: websiteIcon,
         html_file: path.relative(sessionDir, htmlPath),
         meta_file: path.relative(sessionDir, metaPath)
       });
+      if (websiteIcon) {
+        const existing = session.website_icons.find((entry) => entry.page_url === pageUrl);
+        if (existing) {
+          existing.website_icon = websiteIcon;
+          existing.website_icon_meta = websiteIconMeta;
+        } else {
+          session.website_icons.push({
+            page_url: pageUrl,
+            website_icon: websiteIcon,
+            website_icon_meta: websiteIconMeta
+          });
+        }
+      }
     } catch (error) {
       console.error(`Failed to save DOM snapshot (${reason}): ${error.message}`);
     }
