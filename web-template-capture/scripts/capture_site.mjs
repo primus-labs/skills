@@ -184,6 +184,363 @@ function extractOperationName(url) {
   }
 }
 
+function extractLinkAttr(attributesChunk, name) {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let m = attributesChunk.match(new RegExp(`\\b${esc}\\s*=\\s*"([^"]*)"`, "i"));
+  if (m) return m[1].trim();
+  m = attributesChunk.match(new RegExp(`\\b${esc}\\s*=\\s*'([^']*)'`, "i"));
+  if (m) return m[1].trim();
+  // unquoted value: any non-whitespace, non->, non-quote characters (allows leading / for paths)
+  m = attributesChunk.match(new RegExp(`\\b${esc}\\s*=\\s*([^\\s>"'][^\\s>]*)`, "i"));
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * Fallback when page.evaluate misses icons: parse the same HTML string we persist to disk.
+ * Handles attribute order (href before rel or vice versa) and matches saved snapshot 1:1.
+ */
+function extractWebsiteIconFromHtml(html, baseHref) {
+  if (!html || typeof html !== "string") {
+    return null;
+  }
+  let base;
+  try {
+    base = new URL(baseHref).href;
+  } catch {
+    return null;
+  }
+  const headMatch = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i);
+  const scope = headMatch ? headMatch[1] : html.slice(0, 400_000);
+  const linkRe = /<link\s([^>]+)>/gi;
+  const candidates = [];
+  const seen = new Set();
+  let m;
+  const parseSizesScore = (sizesRaw) => {
+    const normalized = String(sizesRaw || "").trim().toLowerCase();
+    if (!normalized) {
+      return 0;
+    }
+    if (normalized.includes("any")) {
+      return 120;
+    }
+    let best = 0;
+    for (const entry of normalized.split(/\s+/)) {
+      const pair = entry.match(/^(\d+)x(\d+)$/);
+      if (pair) {
+        const w = Number(pair[1]);
+        const h = Number(pair[2]);
+        best = Math.max(best, Math.min(w * h, 512 * 512));
+      } else {
+        const one = entry.match(/^(\d+)$/);
+        if (one) {
+          const n = Number(one[1]);
+          best = Math.max(best, Math.min(n * n, 512 * 512));
+        }
+      }
+    }
+    return best;
+  };
+  while ((m = linkRe.exec(scope)) !== null) {
+    const attrs = m[1];
+    const rel = extractLinkAttr(attrs, "rel");
+    const href = extractLinkAttr(attrs, "href");
+    if (!rel || !href || !/icon/i.test(rel)) {
+      continue;
+    }
+    let resolved;
+    try {
+      resolved = new URL(href, base).href;
+    } catch {
+      continue;
+    }
+    if (seen.has(resolved)) {
+      continue;
+    }
+    seen.add(resolved);
+    const normalizedRel = rel.toLowerCase();
+    const type = extractLinkAttr(attrs, "type") || "";
+    const sizes = extractLinkAttr(attrs, "sizes") || "";
+    const fetchPriority = extractLinkAttr(attrs, "fetchpriority") || "";
+    let score = 0;
+    if (normalizedRel.includes("icon") && !normalizedRel.includes("apple-touch") && !normalizedRel.includes("mask") && !normalizedRel.includes("alternate") && !normalizedRel.includes("fluid")) {
+      score += normalizedRel.includes("shortcut icon") ? 95 : 110;
+    } else if (normalizedRel.includes("icon") && normalizedRel.includes("apple-touch")) {
+      score += 85;
+    } else if (normalizedRel.includes("fluid-icon")) {
+      score += 90;
+    } else if (normalizedRel.includes("alternate") && normalizedRel.includes("icon")) {
+      score += 80;
+    } else if (normalizedRel.includes("mask-icon")) {
+      score += 70;
+    }
+    const normalizedType = type.toLowerCase();
+    const rlow = resolved.toLowerCase();
+    if (normalizedType.includes("svg") || rlow.includes(".svg")) {
+      score += 8;
+    } else if (normalizedType.includes("png") || rlow.includes(".png")) {
+      score += 6;
+    } else if (rlow.endsWith(".ico") || rlow.includes(".ico?")) {
+      score += 5;
+    }
+    const sizeScore = parseSizesScore(sizes);
+    score += Math.min(sizeScore / 256, 24);
+    if (sizeScore > 0 && sizeScore <= 32 * 32) {
+      score += 4;
+    }
+    if (fetchPriority.toLowerCase() === "high") {
+      score += 3;
+    }
+    candidates.push({
+      url: resolved,
+      score,
+      rel: normalizedRel,
+      type: type || null,
+      sizes: sizes || null
+    });
+  }
+  if (candidates.length === 0) {
+    return null;
+  }
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    return (a.url.length || 0) - (b.url.length || 0);
+  });
+  const best = candidates[0];
+  return {
+    website_icon: best.url,
+    website_icon_meta: {
+      source: "html_parse",
+      rel: best.rel,
+      type: best.type,
+      sizes: best.sizes
+    }
+  };
+}
+
+async function getWebsiteIcon(page) {
+  return page.evaluate(async () => {
+    const resolveUrl = (value) => {
+      if (!value) {
+        return null;
+      }
+      try {
+        return new URL(value, document.baseURI).href;
+      } catch {
+        return null;
+      }
+    };
+    const clean = (value) => String(value || "").trim();
+    const isValidOrigin = (url) => {
+      try {
+        const u = new URL(url);
+        return u.origin && u.origin !== "null" && !u.origin.startsWith("about:");
+      } catch {
+        return false;
+      }
+    };
+    const parseSizesScore = (sizes) => {
+      const normalized = clean(sizes).toLowerCase();
+      if (!normalized) {
+        return 0;
+      }
+      if (normalized.includes("any")) {
+        return 120;
+      }
+      let best = 0;
+      for (const entry of normalized.split(/\s+/)) {
+        const match = entry.match(/^(\d+)x(\d+)$/i);
+        if (match) {
+          const w = Number(match[1]);
+          const h = Number(match[2]);
+          best = Math.max(best, Math.min(w * h, 512 * 512));
+        } else {
+          const single = entry.match(/^(\d+)$/);
+          if (single) {
+            const n = Number(single[1]);
+            best = Math.max(best, Math.min(n * n, 512 * 512));
+          }
+        }
+      }
+      return best;
+    };
+    const scoreCandidate = (normalizedRel, source, resolvedUrl, normalizedType, sizes, fetchPriority) => {
+      let score = 0;
+      if (source === "manifest") {
+        score += 100;
+      } else if (normalizedRel.includes("icon") && !normalizedRel.includes("apple-touch") && !normalizedRel.includes("mask") && !normalizedRel.includes("alternate") && !normalizedRel.includes("fluid")) {
+        score += normalizedRel.includes("shortcut icon") ? 95 : 110;
+      } else if (normalizedRel.includes("icon") && normalizedRel.includes("apple-touch")) {
+        score += 85;
+      } else if (normalizedRel.includes("fluid-icon")) {
+        score += 90;
+      } else if (normalizedRel.includes("alternate") && normalizedRel.includes("icon")) {
+        score += 80;
+      } else if (normalizedRel.includes("mask-icon")) {
+        score += 70;
+      } else if (source === "msapplication-TileImage") {
+        score += 55;
+      } else if (source === "og:image") {
+        score += 25;
+      }
+      const rlow = resolvedUrl.toLowerCase();
+      if (normalizedType.includes("svg") || rlow.includes(".svg")) {
+        score += 8;
+      } else if (normalizedType.includes("png") || rlow.includes(".png")) {
+        score += 6;
+      } else if (rlow.endsWith(".ico") || rlow.includes(".ico?")) {
+        score += 5;
+      }
+      const sizeScore = parseSizesScore(sizes);
+      score += Math.min(sizeScore / 256, 24);
+      if (sizeScore > 0 && sizeScore <= 32 * 32) {
+        score += 4;
+      }
+      if (clean(fetchPriority).toLowerCase() === "high") {
+        score += 3;
+      }
+      return score;
+    };
+    const candidates = [];
+    const seen = new Set();
+
+    const pushCandidate = ({ href, source, rel = "", type = "", sizes = "", fetchPriority = "" }) => {
+      const resolved = resolveUrl(href);
+      if (!resolved || seen.has(resolved)) {
+        return;
+      }
+      seen.add(resolved);
+      const normalizedRel = clean(rel).toLowerCase();
+      const normalizedType = clean(type).toLowerCase();
+      const score = scoreCandidate(normalizedRel, source, resolved, normalizedType, sizes, fetchPriority);
+      candidates.push({
+        url: resolved,
+        source,
+        rel: normalizedRel || null,
+        type: normalizedType || null,
+        sizes: clean(sizes) || null,
+        score
+      });
+    };
+
+    // --- Standard <link rel="*icon*"> tags ---
+    document.querySelectorAll("link[rel]").forEach((element) => {
+      const rel = clean(element.getAttribute("rel"));
+      if (!/icon/i.test(rel)) {
+        return;
+      }
+      pushCandidate({
+        href: element.getAttribute("href"),
+        source: "link",
+        rel,
+        type: element.getAttribute("type"),
+        sizes: element.getAttribute("sizes"),
+        fetchPriority: element.getAttribute("fetchpriority") || ""
+      });
+    });
+
+    // --- Meta tag sources ---
+    const ogImage = document.querySelector('meta[property="og:image"], meta[name="og:image"]');
+    if (ogImage) {
+      pushCandidate({
+        href: ogImage.getAttribute("content"),
+        source: "og:image"
+      });
+    }
+
+    const tileImage = document.querySelector('meta[name="msapplication-TileImage"]');
+    if (tileImage) {
+      pushCandidate({
+        href: tileImage.getAttribute("content"),
+        source: "msapplication-TileImage"
+      });
+    }
+
+    // --- Web App Manifest icons ---
+    const manifestEl = document.querySelector('link[rel~="manifest"]');
+    if (manifestEl?.href) {
+      try {
+        const manifestBase = new URL(manifestEl.href, document.baseURI).href;
+        const resp = await fetch(manifestBase, { credentials: "same-origin" });
+        if (resp.ok) {
+          const manifest = await resp.json();
+          for (const icon of Array.isArray(manifest.icons) ? manifest.icons : []) {
+            if (!icon?.src) {
+              continue;
+            }
+            const purpose = String(icon.purpose || "any").toLowerCase().trim();
+            if (purpose === "maskable") {
+              continue;
+            }
+            try {
+              const iconHref = new URL(icon.src, manifestBase).href;
+              pushCandidate({
+                href: iconHref,
+                source: "manifest",
+                rel: "manifest-icon",
+                type: icon.type || "",
+                sizes: icon.sizes || ""
+              });
+            } catch {
+              // ignore unresolvable manifest icon src
+            }
+          }
+        }
+      } catch {
+        // manifest fetch failure is non-fatal
+      }
+    }
+
+    candidates.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return (a.url.length || 0) - (b.url.length || 0);
+    });
+    let best;
+    if (candidates.length > 0) {
+      best = candidates[0];
+    } else {
+      try {
+        const origin = window.location.origin;
+        if (origin && isValidOrigin(window.location.href)) {
+          best = {
+            url: new URL("/favicon.ico", origin).href,
+            source: "fallback",
+            rel: null,
+            type: null,
+            sizes: null,
+            score: 1
+          };
+        } else {
+          best = null;
+        }
+      } catch {
+        best = null;
+      }
+    }
+    if (!best) {
+      return {
+        website_icon: null,
+        website_icon_meta: null
+      };
+    }
+    return {
+      website_icon: best.url,
+      website_icon_meta: {
+        source: best.source,
+        rel: best.rel,
+        type: best.type,
+        sizes: best.sizes
+      }
+    };
+  }).catch(() => ({
+    website_icon: null,
+    website_icon_meta: null
+  }));
+}
+
 function isLikelyLoginUrl(value) {
   const url = String(value || "");
   return LOGIN_URL_PATTERNS.some((pattern) => pattern.test(url));
@@ -236,6 +593,7 @@ async function main() {
     started_at: new Date().toISOString(),
     target: targetProfile,
     page_urls: [],
+    website_icons: [],
     response_count: 0,
     dom_snapshots: [],
     interactions: []
@@ -625,17 +983,28 @@ async function main() {
       const metaPath = path.join(domDir, metaName);
       const clickCandidates = await listClickableCandidates();
       const domCatalog = await listDomCatalog();
-      const [html, title, text] = await Promise.all([
-        page.content(),
+      const html = await page.content();
+      const [title, text] = await Promise.all([
         page.title().catch(() => ""),
         page.locator("body").innerText().catch(() => "")
       ]);
+      let iconInfo = await getWebsiteIcon(page);
+      if (!iconInfo?.website_icon) {
+        const fromHtml = extractWebsiteIconFromHtml(html, pageUrl);
+        if (fromHtml?.website_icon) {
+          iconInfo = fromHtml;
+        }
+      }
+      const websiteIcon = iconInfo?.website_icon || null;
+      const websiteIconMeta = iconInfo?.website_icon_meta || null;
 
       await fs.writeFile(htmlPath, html);
       await fs.writeFile(metaPath, JSON.stringify({
         reason,
         page_url: pageUrl,
         title,
+        website_icon: websiteIcon,
+        website_icon_meta: websiteIconMeta,
         text_excerpt: text.slice(0, 4000),
         top_click_candidates: clickCandidates.slice(0, 15).map((candidate) => ({
           selector: candidate.selector,
@@ -652,9 +1021,23 @@ async function main() {
         page_url: pageUrl,
         title,
         reason,
+        website_icon: websiteIcon,
         html_file: path.relative(sessionDir, htmlPath),
         meta_file: path.relative(sessionDir, metaPath)
       });
+      if (websiteIcon) {
+        const existing = session.website_icons.find((entry) => entry.page_url === pageUrl);
+        if (existing) {
+          existing.website_icon = websiteIcon;
+          existing.website_icon_meta = websiteIconMeta;
+        } else {
+          session.website_icons.push({
+            page_url: pageUrl,
+            website_icon: websiteIcon,
+            website_icon_meta: websiteIconMeta
+          });
+        }
+      }
     } catch (error) {
       console.error(`Failed to save DOM snapshot (${reason}): ${error.message}`);
     }

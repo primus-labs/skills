@@ -39,7 +39,8 @@ Known sample values make the ranking much stronger. If the user does not know th
 4. Run `scripts/find_candidates.mjs` against the saved session.
 5. If the top candidates are ambiguous, read [references/ranking_rules.md](references/ranking_rules.md) and prefer the most direct data source.
 6. Run `scripts/emit_template.mjs` to generate a template draft from the candidate report.
-7. Present the top 1-3 candidates, explain why the highest-ranked source is preferred, and state any instability risks.
+7. When the page exposes a tab icon or favicon, carry it through to the final template output as `websiteIcon`.
+8. Present the top 1-3 candidates, explain why the highest-ranked source is preferred, and state any instability risks.
 
 When presenting or emitting a template, treat `Source URL` as the page URL that actually triggered the chosen request. Keep the original `site_url` only as the entry URL for the capture session.
 
@@ -122,10 +123,10 @@ The scripts emit:
 
 - `session.json`: high-level capture metadata
 - `responses/`: captured network payloads
-- `dom/`: DOM snapshots plus metadata with visible-node XPath catalog
+- `dom/`: DOM snapshots plus metadata with visible-node XPath catalog and the best detected page icon
 - `interactions`: per-click action records with response deltas in `session.json`
-- `candidate-report.json`: ranked field candidates
-- `template-draft.json`: normalized template draft with the selected candidate plus alternative summaries
+- `candidate-report.json`: ranked field candidates plus page icon context when available
+- `template-draft.json`: normalized template draft with the selected candidate plus alternative summaries and `websiteIcon`
 
 For list-like HTML fields, `template-draft.json` should prefer:
 

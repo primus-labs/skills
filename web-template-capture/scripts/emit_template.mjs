@@ -35,6 +35,7 @@ function buildCandidateSummary(candidate, index, topCandidate) {
   return {
     index,
     source_url: candidate.page_url || null,
+    website_icon: candidate.website_icon || null,
     request_method: candidate.request_method,
     request_url_pattern: candidate.request_url_pattern,
     operation_name: candidate.operation_name || null,
@@ -73,6 +74,7 @@ async function main() {
   const templateDraft = {
     generated_at: new Date().toISOString(),
     selected_candidate_index: candidateIndex,
+    websiteIcon: candidate.website_icon || report.website_icon || null,
     target: report.target,
     source: {
       source_type: candidate.source_type,

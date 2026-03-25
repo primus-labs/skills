@@ -6,6 +6,7 @@
 {
   "name": "twitterusername-mcp",
   "description": "Extracts the logged-in Twitter username from the account settings endpoint.",
+  "websiteIcon": "https://abs.twimg.com/favicons/twitter.ico",
   "category": "OTHER",
   "status": "AVAILABLE",
   "dataSource": "twitter",
@@ -20,6 +21,7 @@ Rules:
 
 - `name` is the template name.
 - `description` is the detailed description of the template.
+- `websiteIcon` should be the best absolute URL for the website's tab icon or favicon observed on the source page. If no icon can be detected, it may be `null`.
 - `dataPageTemplate` is a JSON string. Its `baseUrl` must be the page URL where the selected data source was observed.
 - `dataSourceTemplate` is a JSON string. It stores the request matching rule and the target field extraction expression.
 - `status` must always be `AVAILABLE`.
