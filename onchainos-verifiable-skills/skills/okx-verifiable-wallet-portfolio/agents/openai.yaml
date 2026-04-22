@@ -1,0 +1,7 @@
+interface:
+  display_name: "OKX Verifiable Wallet Portfolio"
+  short_description: "Plan or produce partial verifiable wallet balance calls."
+  default_prompt: "Use $okx-verifiable-wallet-portfolio with $primus-zktls-core-sdk to assess whether an OKX OnchainOS-style wallet portfolio request can be answered with a verifiable API call, and prefer narrow balance proofs over broad inventory snapshots."
+
+policy:
+  allow_implicit_invocation: true

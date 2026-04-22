@@ -252,6 +252,59 @@ function dedupeReasons(reasons) {
   return [...new Set(reasons)];
 }
 
+function normalizeLookupUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.hash = "";
+    return parsed.href;
+  } catch {
+    return String(rawUrl || "");
+  }
+}
+
+function buildWebsiteIconIndex(session) {
+  const byPageUrl = new Map();
+  const byOrigin = new Map();
+  for (const entry of Array.isArray(session.website_icons) ? session.website_icons : []) {
+    if (!entry?.website_icon) {
+      continue;
+    }
+    const normalizedPageUrl = normalizeLookupUrl(entry.page_url);
+    if (normalizedPageUrl && !byPageUrl.has(normalizedPageUrl)) {
+      byPageUrl.set(normalizedPageUrl, entry.website_icon);
+    }
+    try {
+      const origin = new URL(entry.page_url).origin;
+      if (origin && !byOrigin.has(origin)) {
+        byOrigin.set(origin, entry.website_icon);
+      }
+    } catch {
+      // Ignore malformed page URLs in icon index.
+    }
+  }
+  return { byPageUrl, byOrigin };
+}
+
+function lookupWebsiteIcon(iconIndex, ...urls) {
+  for (const rawUrl of urls) {
+    const normalized = normalizeLookupUrl(rawUrl);
+    if (normalized && iconIndex.byPageUrl.has(normalized)) {
+      return iconIndex.byPageUrl.get(normalized);
+    }
+  }
+  for (const rawUrl of urls) {
+    try {
+      const origin = new URL(rawUrl).origin;
+      if (origin && iconIndex.byOrigin.has(origin)) {
+        return iconIndex.byOrigin.get(origin);
+      }
+    } catch {
+      // Ignore malformed URLs when falling back to origin lookup.
+    }
+  }
+  return null;
+}
+
 function isListLikeField(fieldName) {
   return /(list|connections|records|items|entries|followers|following|orders|transactions|contacts|friends)/i
     .test(String(fieldName || ""));
@@ -577,6 +630,7 @@ async function analyzeResponses(sessionDir, options) {
         json_path: jsonPath,
         sample_value: value,
         page_url: raw.page_url,
+        website_icon: lookupWebsiteIcon(options.iconIndex, raw.page_url, options.siteUrl),
         active_interaction: raw.active_interaction,
         file: path.relative(sessionDir, absolutePath)
       });
@@ -673,6 +727,7 @@ async function analyzeDom(sessionDir, options) {
         dom_xpath_pattern: enrichedNode.xpath_pattern || null,
         sample_value: sampleValue,
         page_url: meta.page_url || null,
+        website_icon: lookupWebsiteIcon(options.iconIndex, meta.page_url, options.siteUrl),
         file: path.relative(sessionDir, absolutePath)
       });
     }
@@ -738,6 +793,7 @@ async function analyzeDom(sessionDir, options) {
           value_attribute: valueAttribute,
           sample_value: values.slice(0, 10),
           page_url: meta.page_url || null,
+          website_icon: lookupWebsiteIcon(options.iconIndex, meta.page_url, options.siteUrl),
           file: path.relative(sessionDir, absolutePath)
         });
       }
@@ -767,6 +823,7 @@ async function analyzeDom(sessionDir, options) {
         dom_xpath_pattern: null,
         sample_value: options.hintValue,
         page_url: null,
+        website_icon: lookupWebsiteIcon(options.iconIndex, options.siteUrl),
         file: path.relative(sessionDir, absolutePath)
       });
     }
@@ -791,17 +848,22 @@ async function main() {
   const ownershipMode = args["ownership-mode"] || "page_subject";
   const hintValue = Object.prototype.hasOwnProperty.call(args, "hint-value") ? args["hint-value"] : null;
   const session = JSON.parse(await fs.readFile(path.join(sessionDir, "session.json"), "utf8"));
+  const iconIndex = buildWebsiteIconIndex(session);
 
   const networkCandidates = await analyzeResponses(sessionDir, {
     fieldName,
     fieldType,
     hintValue,
-    ownershipMode
+    ownershipMode,
+    iconIndex,
+    siteUrl: session.site_url
   });
   const domCandidates = await analyzeDom(sessionDir, {
     fieldName,
     hintValue,
-    ownershipMode
+    ownershipMode,
+    iconIndex,
+    siteUrl: session.site_url
   });
 
   const candidates = dedupeCandidates([...networkCandidates, ...domCandidates])
@@ -818,6 +880,7 @@ async function main() {
       ownership_mode: ownershipMode
     },
     site_url: session.site_url,
+    website_icon: lookupWebsiteIcon(iconIndex, session.site_url),
     top_candidates: candidates
   };
 

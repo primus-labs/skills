@@ -1,0 +1,19 @@
+{
+  "name": "primus-network-core-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Skill: build backend Node.js programs using @primuslabs/network-core-sdk",
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs"
+  },
+  "references": {
+    "install": "https://docs.primuslabs.xyz/build/for-backend/install",
+    "example": "https://docs.primuslabs.xyz/build/for-backend/simpleexample",
+    "op":      "https://docs.primuslabs.xyz/build/op",
+    "multi-url": "https://docs.primuslabs.xyz/build/multi-url",
+    "mtls":    "https://docs.primuslabs.xyz/build/mtls",
+    "dvc":     "https://docs.primuslabs.xyz/build/dvc",
+    "errors":  "https://docs.primuslabs.xyz/build/misc/error-code",
+    "attestation": "https://docs.primuslabs.xyz/build/misc/attestation-structure"
+  }
+}

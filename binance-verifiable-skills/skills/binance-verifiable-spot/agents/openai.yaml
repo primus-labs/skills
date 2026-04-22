@@ -1,0 +1,7 @@
+interface:
+  display_name: "Binance Verifiable Spot"
+  short_description: "Produce Primus-backed verifiable Binance Spot calls."
+  default_prompt: "Use $binance-verifiable-spot with $primus-zktls-core-sdk to turn suitable Binance Spot price and kline requests into verifiable API calls."
+
+policy:
+  allow_implicit_invocation: true

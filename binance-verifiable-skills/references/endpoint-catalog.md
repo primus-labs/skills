@@ -1,0 +1,267 @@
+# Endpoint Catalog
+
+This catalog lists the first-release Binance endpoints modeled for zkTLS proofs.
+
+## Spot
+
+- `GET /api/v3/ticker/price`
+  - host: `https://api.binance.com`
+  - default proof shape: `verifiable`
+  - reveal:
+    - `symbol`
+    - `price`
+- `GET /api/v3/klines`
+  - host: `https://api.binance.com`
+  - default proof shape: `verifiable`
+  - first release:
+    - use `limit=1`
+    - reveal only the latest bar
+- `GET /api/v3/ticker/bookTicker`
+  - host: `https://api.binance.com`
+  - default proof shape: `verifiable`
+  - reveal:
+    - `symbol`
+    - `bidPrice`
+    - `bidQty`
+    - `askPrice`
+    - `askQty`
+- `GET /api/v3/avgPrice`
+  - host: `https://api.binance.com`
+  - default proof shape: `partial`
+  - reveal:
+    - `mins`
+    - `price`
+    - `closeTime`
+- `GET /api/v3/depth`
+  - host: `https://api.binance.com`
+  - default proof shape: `partial`
+  - first release:
+    - keep `limit` small
+    - reveal only best bid and best ask
+- `GET /api/v3/account`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `makerCommission`
+    - `takerCommission`
+    - `canTrade`
+    - `canWithdraw`
+    - `canDeposit`
+    - `accountType`
+    - `updateTime`
+- `GET /sapi/v1/account/status`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `data`
+- `GET /sapi/v1/account/info`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `vipLevel`
+    - `isMarginEnabled`
+    - `isFutureEnabled`
+    - `isOptionsEnabled`
+    - `isPortfolioMarginRetailEnabled`
+- `GET /api/v3/order`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - first release:
+    - require one explicit `orderId` or `origClientOrderId`
+    - reveal one order object only
+- `GET /api/v3/account`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - asset-balance pattern:
+    - resolve the target balance row index from the direct response
+    - reveal only:
+      - `asset`
+      - `free`
+      - `locked`
+- `GET /sapi/v1/asset/tradeFee`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `symbol`
+    - `makerCommission`
+    - `takerCommission`
+- `GET /sapi/v1/account/apiRestrictions`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `ipRestrict`
+    - `enableReading`
+    - `enableSpotAndMarginTrading`
+    - `enableWithdrawals`
+    - `enableInternalTransfer`
+    - `permitsUniversalTransfer`
+- `GET /sapi/v1/account/apiTradingStatus`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `isLocked`
+    - `plannedRecoverTime`
+    - `triggerCondition.UFR`
+    - `triggerCondition.IFER`
+    - `triggerCondition.GCR`
+    - `updateTime`
+- `GET /sapi/v1/capital/config/getall`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `coin`
+    - `name`
+    - `free`
+    - `depositAllEnable`
+    - `withdrawAllEnable`
+    - `trading`
+  - note:
+    - resolve the target coin row index from the direct response before attesting
+    - current live proof attempts can time out because the endpoint returns a large signed array
+- `GET /sapi/v1/bnbBurn`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `spotBNBBurn`
+    - `interestBNBBurn`
+
+## Margin Trading
+
+- `GET /sapi/v1/margin/allPairs`
+  - host: `https://api.binance.com`
+  - default proof shape: `verifiable`
+  - reveal:
+    - `symbol`
+    - `base`
+    - `quote`
+    - `isMarginTrade`
+    - `isBuyAllowed`
+    - `isSellAllowed`
+- `GET /sapi/v1/margin/account`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `borrowEnabled`
+    - `tradeEnabled`
+    - `transferEnabled`
+    - `marginLevel`
+    - `totalAssetOfBtc`
+    - `totalLiabilityOfBtc`
+    - `totalNetAssetOfBtc`
+- `GET /sapi/v1/margin/maxBorrowable`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `amount`
+    - `borrowLimit`
+- `GET /sapi/v1/margin/maxTransferable`
+  - host: `https://api.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `amount`
+
+## Derivatives Trading USDS Futures
+
+- `GET /fapi/v1/premiumIndex`
+  - host: `https://fapi.binance.com`
+  - default proof shape: `partial`
+  - reveal:
+    - `symbol`
+    - `markPrice`
+    - `indexPrice`
+    - `estimatedSettlePrice`
+    - `lastFundingRate`
+    - `nextFundingTime`
+    - `time`
+- `GET /fapi/v1/fundingRate`
+  - host: `https://fapi.binance.com`
+  - default proof shape: `partial`
+  - first release:
+    - use `limit=1`
+    - reveal only the latest row
+- `GET /fapi/v1/openInterest`
+  - host: `https://fapi.binance.com`
+  - default proof shape: `partial`
+  - reveal:
+    - `symbol`
+    - `openInterest`
+    - `time`
+- `GET /fapi/v3/positionRisk`
+  - host: `https://fapi.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - first release:
+    - pass `symbol` when possible
+    - reveal one position row only
+- `GET /fapi/v3/balance`
+  - host: `https://fapi.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `asset`
+    - `balance`
+    - `crossWalletBalance`
+    - `crossUnPnl`
+    - `availableBalance`
+  - note:
+    - resolve the target asset row index from the direct response before attesting
+- `GET /fapi/v3/account`
+  - host: `https://fapi.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `totalInitialMargin`
+    - `totalMaintMargin`
+    - `totalWalletBalance`
+    - `totalUnrealizedProfit`
+    - `totalMarginBalance`
+    - `availableBalance`
+    - `maxWithdrawAmount`
+- `GET /fapi/v1/apiTradingStatus`
+  - host: `https://fapi.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `updateTime`
+    - `indicators`
+- `GET /fapi/v1/commissionRate`
+  - host: `https://fapi.binance.com`
+  - auth: signed
+  - default proof shape: `partial`
+  - reveal:
+    - `symbol`
+    - `makerCommissionRate`
+    - `takerCommissionRate`
+
+## Alpha
+
+- `GET /bapi/defi/v5/public/wallet-direct/buw/wallet/market/token/search`
+  - host: `https://web3.binance.com`
+  - default proof shape: `verifiable`
+  - first release:
+    - use one keyword and optional small chain filter
+    - prove only the top match
+  - reveal:
+    - `code`
+    - `success`
+    - `symbol`
+    - `name`
+    - `price`
+    - `marketCap`
+
+## Planned, Not Yet Modeled
+
+- Margin transfer and loan flows
+- Alpha metadata and dynamic-info endpoints

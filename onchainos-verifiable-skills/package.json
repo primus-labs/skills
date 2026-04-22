@@ -1,0 +1,28 @@
+{
+  "name": "onchainos-verifiable-skills",
+  "version": "1.0.0",
+  "description": "This package mirrors the public `onchainos-skills` categories and adapts suitable OnchainOS API calls into verifiable flows built on `primus-zktls-core-sdk`. Read-heavy endpoints are usually the best default proof targets, while action-oriented endpoints can also be attested when the user wants the extra assurance.",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "demo:market-price": "node scripts/demo-okx-market-price.mjs",
+    "demo:token-search": "node scripts/demo-okx-token-search.mjs",
+    "demo:token-basic-info": "node scripts/demo-okx-token-basic-info.mjs",
+    "demo:wallet-token-balance": "node scripts/demo-okx-wallet-token-balance.mjs",
+    "demo:wallet-total-value": "node scripts/demo-okx-wallet-total-value.mjs",
+    "demo:gas-price": "node scripts/demo-okx-gas-price.mjs",
+    "demo:gateway-supported-chains": "node scripts/demo-okx-gateway-supported-chains.mjs",
+    "demo:swap-supported-chains": "node scripts/demo-okx-swap-supported-chains.mjs",
+    "demo:swap-liquidity": "node scripts/demo-okx-swap-liquidity.mjs",
+    "demo:swap-quote": "node scripts/demo-okx-swap-quote.mjs",
+    "test": "node scripts/demo-okx-market-price.mjs --help && node scripts/demo-okx-token-search.mjs --help && node scripts/demo-okx-token-basic-info.mjs --help && node scripts/demo-okx-wallet-token-balance.mjs --help && node scripts/demo-okx-wallet-total-value.mjs --help && node scripts/demo-okx-gas-price.mjs --help && node scripts/demo-okx-gateway-supported-chains.mjs --help && node scripts/demo-okx-swap-supported-chains.mjs --help && node scripts/demo-okx-swap-liquidity.mjs --help && node scripts/demo-okx-swap-quote.mjs --help"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@primuslabs/zktls-core-sdk": "^0.2.6",
+    "tslib": "^2.8.1"
+  }
+}

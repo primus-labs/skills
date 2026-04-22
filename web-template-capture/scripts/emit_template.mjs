@@ -221,17 +221,38 @@ async function main() {
   const defaultName = `${toSlug(dataSource) || "web"}-${toSlug(targetFieldName) || "value"}-mcp`;
   const defaultDescription = `Extracts ${normalizeWhitespace(targetFieldName)} from ${host || dataSource}.`;
   const templateDraft = {
-    name: args.name || defaultName,
-    description: args.description || defaultDescription,
-    category: args.category || "OTHER",
-    status: "AVAILABLE",
-    dataSource,
-    testResult: "SUCCESS",
-    templatePrivate: args["template-private"] ? args["template-private"] !== "false" : true,
-    dataPageTemplate: JSON.stringify({
-      baseUrl: sourceUrl || report.site_url || ""
-    }),
-    dataSourceTemplate: JSON.stringify(dataSourceTemplate)
+    generated_at: new Date().toISOString(),
+    selected_candidate_index: candidateIndex,
+    websiteIcon: candidate.website_icon || report.website_icon || null,
+    target: report.target,
+    source: {
+      source_type: candidate.source_type,
+      source_url: sourceUrl,
+      entry_url: report.site_url || null,
+      request_method: candidate.request_method,
+      request_url_pattern: candidate.request_url_pattern,
+      operation_name: candidate.operation_name || null
+    },
+    field: {
+      json_path: candidate.json_path || null,
+      dom_selector: candidate.dom_selector || null,
+      dom_xpath: candidate.dom_xpath || null,
+      dom_item_xpath: candidate.dom_item_xpath || null,
+      value_attribute: candidate.value_attribute || null,
+      sample_value: candidate.sample_value
+    },
+    stability: {
+      score: candidate.score,
+      reasons: candidate.reasons
+    },
+    alternatives,
+    notes: [
+      candidate.request_url ? `Observed request: ${candidate.request_url}` : "Observed in DOM snapshot only",
+      candidate.dom_xpath ? `Observed DOM XPath: ${candidate.dom_xpath}` : "No DOM XPath recorded for this candidate",
+      candidate.value_attribute ? `Read extracted value from: ${candidate.value_attribute}` : "No explicit DOM value attribute recorded",
+      sourceUrl ? `Observed while on page: ${sourceUrl}` : "No page URL recorded for this candidate",
+      candidate.file ? `Evidence file: ${candidate.file}` : "No evidence file recorded"
+    ]
   };
 
   const outputPath = path.join(path.dirname(reportPath), "template-draft.json");
