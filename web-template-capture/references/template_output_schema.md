@@ -11,8 +11,8 @@
   "dataSource": "twitter",
   "testResult": "SUCCESS",
   "templatePrivate": true,
-  "dataPageTemplate": "{\"baseUrl\":\"https://twitter.com\"}",
-  "dataSourceTemplate": "[{\"requestTemplate\":{\"targetUrlExpression\":\"https://api.x.com/1.1/account/settings.json.*\",\"targetUrlType\":\"REGX\",\"ext\":{},\"dynamicParamters\":[],\"method\":\"GET\"},\"responseTemplate\":[{\"resolver\":{\"type\":\"JSON_PATH\",\"expression\":\"$.screen_name\"},\"valueType\":\"FIXED_VALUE\",\"fieldType\":\"FIELD_REVEAL\",\"feilds\":[{\"fieldName\":\"\",\"showName\":\"\",\"key\":\"screen_name\",\"DataType\":\"string\"}]}]}]"
+  "dataPageTemplate": "{\"baseUrl\":\"https://x.com/settings/account\"}",
+  "dataSourceTemplate": "[{\"requestTemplate\":{\"host\":\"api.x.com\",\"targetUrlExpression\":\"https://api.x.com/1.1/account/settings.json(?:\\\\?.*)?\",\"targetUrlType\":\"REGX\",\"ext\":{},\"dynamicParamters\":[],\"method\":\"GET\"},\"responseTemplate\":[{\"resolver\":{\"type\":\"JSON_PATH\",\"expression\":\"$.screen_name\"},\"valueType\":\"FIXED_VALUE\",\"fieldType\":\"FIELD_REVEAL\",\"feilds\":[{\"fieldName\":\"username\",\"showName\":\"Username\",\"key\":\"screen_name\",\"DataType\":\"string\"}]}]}]"
 }
 ```
 
@@ -20,15 +20,26 @@ Rules:
 
 - `name` is the template name.
 - `description` is the detailed description of the template.
-- `dataPageTemplate` is a JSON string. Its `baseUrl` must be the page URL where the selected data source was observed.
-- `dataSourceTemplate` is a JSON string. It stores the request matching rule and the target field extraction expression.
+- `dataPageTemplate` is a JSON string. Its `baseUrl` must be the page URL where the selected interface request was observed, or the HTML page URL where the selected field was rendered.
+- `dataSourceTemplate` is a JSON string. It stores an array of request/response template objects.
 - `status` must always be `AVAILABLE`.
 - `testResult` must always be `SUCCESS`.
+- `requestTemplate.host` should be the host portion of the selected request URL, such as `api.x.com`.
+- `dataPageTemplate.baseUrl` is the interface-or-HTML page address. It is not the API request URL itself.
 - `requestTemplate.targetUrlExpression` must be a regular expression string that matches the request URL carrying the target data.
 - `requestTemplate.targetUrlType` should be `REGX`.
-- For JSON responses, use `resolver.type` = `JSON_PATH` and do not include `requestTemplate.ignoreResponse`.
+- `requestTemplate.ext` should default to `{}`.
+- `requestTemplate.dynamicParamters` should default to `[]` unless the caller needs dynamic extraction rules.
+- `requestTemplate.method` must be the observed request method.
+- For JSON responses, use `resolver.type` = `JSON_PATH`.
 - If the target data comes from HTML, `responseTemplate.resolver.expression` must be an XPath expression.
 - Otherwise, `responseTemplate.resolver.expression` must be a JSON path expression.
-- For HTML-derived extraction, `requestTemplate` must include `"ignoreResponse": false`.
-- `dataSourceTemplate` should describe only the selected target-field source, not all alternatives.
-- `baseUrl` should use the actual page URL, not just the original site entry URL, when the selected evidence was observed on a later page.
+- `resolver.type` remains `JSON_PATH` even when `resolver.expression` contains XPath for HTML-derived fields.
+- `valueType` must always be `FIXED_VALUE`.
+- `fieldType` must always be `FIELD_REVEAL`.
+- Preserve the downstream key spelling `feilds`.
+- `feilds[].fieldName`, `feilds[].showName`, `feilds[].key`, and `feilds[].DataType` should be filled with the discovered field metadata when available.
+- `dataSourceTemplate` should describe the selected endpoint template. If a single endpoint yields multiple desired fields, keep them together in the same `responseTemplate` array.
+- If desired fields come from different endpoints, emit multiple top-level objects inside the `dataSourceTemplate` array, one per endpoint.
+- `baseUrl` should use the actual page URL where the request was triggered or the HTML was rendered, not just the original site entry URL, when the selected evidence was observed on a later page.
+- `targetUrlExpression` should be regex-safe. Escape literal `?` and other regex-sensitive characters, and allow optional query strings when appropriate.

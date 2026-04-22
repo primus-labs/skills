@@ -26,3 +26,4 @@ build/
 
 tmp/
 .tmp/
+web-template-capture/package-lock.json
