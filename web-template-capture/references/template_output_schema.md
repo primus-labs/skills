@@ -22,7 +22,10 @@ Rules:
 - `name` is the template name.
 - `description` is the detailed description of the template.
 - `dataPageTemplate` is a JSON string. Its `baseUrl` must be the page URL where the selected interface request was observed, or the HTML page URL where the selected field was rendered.
-- `websiteIcon` should be the best absolute URL for the website's tab icon or favicon observed on the source page. If no icon can be detected, it may be `null`.
+- `websiteIcon` should be the best absolute URL for the website's brand logo/icon observed on the source page.
+- Preferred sources for `websiteIcon` are favicon-like assets such as `favicon.ico`, `link rel="icon"`, `apple-touch-icon`, manifest icons, or other site icon files that represent the brand.
+- Avoid using large social/share preview images such as `og:image` unless no dedicated site icon/logo asset is available.
+- If no suitable icon can be detected, `websiteIcon` may be `null`.
 - `dataSourceTemplate` is a JSON string. It stores an array of request/response template objects.
 - `status` must always be `AVAILABLE`.
 - `testResult` must always be `SUCCESS`.
@@ -33,6 +36,8 @@ Rules:
 - `requestTemplate.ext` should default to `{}`.
 - `requestTemplate.dynamicParamters` should default to `[]` unless the caller needs dynamic extraction rules.
 - `requestTemplate.method` must be the observed request method.
+- If the selected source is HTML-only, `requestTemplate.ignoreResponse` must be `true`.
+- For normal network-backed sources, omit `requestTemplate.ignoreResponse`.
 - For JSON responses, use `resolver.type` = `JSON_PATH`.
 - If the target data comes from HTML, `responseTemplate.resolver.expression` must be an XPath expression.
 - Otherwise, `responseTemplate.resolver.expression` must be a JSON path expression.

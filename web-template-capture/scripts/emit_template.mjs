@@ -179,6 +179,10 @@ function buildResponseTemplateEntry(report, candidate) {
   };
 }
 
+function isHtmlOnlyCandidate(candidate) {
+  return candidate?.source_type === "dom" || (!candidate?.json_path && Boolean(candidate?.dom_xpath || candidate?.dom_selector));
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const reportPath = args.report;
@@ -201,6 +205,7 @@ async function main() {
   if (!targetUrlExpression) {
     throw new Error("Unable to derive requestTemplate.targetUrlExpression from selected candidate");
   }
+  const htmlOnly = isHtmlOnlyCandidate(candidate);
 
   const requestTemplate = {
     host: host || "",
@@ -210,6 +215,9 @@ async function main() {
     dynamicParamters: [],
     method: candidate.request_method || "GET"
   };
+  if (htmlOnly) {
+    requestTemplate.ignoreResponse = true;
+  }
 
   const dataSourceTemplate = [
     {
@@ -218,12 +226,35 @@ async function main() {
     }
   ];
 
+  const alternatives = report.top_candidates
+    .slice(0, Math.max(1, Number(args.alternatives || 3)))
+    .map((item, index) => ({
+      index,
+      source_type: item.source_type,
+      request_url_pattern: item.request_url_pattern || item.request_url || item.page_url || null,
+      json_path: item.json_path || null,
+      dom_xpath: item.dom_xpath || item.dom_selector || null,
+      score: item.score,
+      reasons: item.reasons
+    }));
+
   const defaultName = `${toSlug(dataSource) || "web"}-${toSlug(targetFieldName) || "value"}-mcp`;
   const defaultDescription = `Extracts ${normalizeWhitespace(targetFieldName)} from ${host || dataSource}.`;
   const templateDraft = {
+    name: args.name || defaultName,
+    description: args.description || defaultDescription,
+    websiteIcon: candidate.website_icon || report.website_icon || null,
+    category: args.category || "OTHER",
+    status: "AVAILABLE",
+    dataSource,
+    testResult: "SUCCESS",
+    templatePrivate: true,
+    dataPageTemplate: JSON.stringify({
+      baseUrl: sourceUrl || report.site_url || ""
+    }),
+    dataSourceTemplate: JSON.stringify(dataSourceTemplate),
     generated_at: new Date().toISOString(),
     selected_candidate_index: candidateIndex,
-    websiteIcon: candidate.website_icon || report.website_icon || null,
     target: report.target,
     source: {
       source_type: candidate.source_type,

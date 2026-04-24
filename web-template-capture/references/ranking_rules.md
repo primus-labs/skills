@@ -19,6 +19,7 @@ Use these rules when `find_candidates.mjs` returns multiple plausible sources.
 4. Timelines unless the target only exists there
 5. DOM extraction when a direct JSON source exists
 6. Numeric fields whose key conflicts with the target meaning, such as `time`, `timestamp`, `level`, or `status` when the user asked for `volume`
+7. Any candidate where the known target value appears directly in the browser address bar URL, including path, query, or hash
 
 ## GraphQL
 

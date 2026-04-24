@@ -196,7 +196,7 @@ function extractLinkAttr(attributesChunk, name) {
 }
 
 /**
- * Fallback when page.evaluate misses icons: parse the same HTML string we persist to disk.
+ * Fallback when page.evaluate misses icon-like logo assets: parse the same HTML string we persist to disk.
  * Handles attribute order (href before rel or vice versa) and matches saved snapshot 1:1.
  */
 function extractWebsiteIconFromHtml(html, baseHref) {
@@ -441,14 +441,6 @@ async function getWebsiteIcon(page) {
     });
 
     // --- Meta tag sources ---
-    const ogImage = document.querySelector('meta[property="og:image"], meta[name="og:image"]');
-    if (ogImage) {
-      pushCandidate({
-        href: ogImage.getAttribute("content"),
-        source: "og:image"
-      });
-    }
-
     const tileImage = document.querySelector('meta[name="msapplication-TileImage"]');
     if (tileImage) {
       pushCandidate({
@@ -489,6 +481,18 @@ async function getWebsiteIcon(page) {
         }
       } catch {
         // manifest fetch failure is non-fatal
+      }
+    }
+
+    // --- Social card image fallback ---
+    // Only consider og:image when no dedicated site icon/logo asset was found.
+    if (candidates.length === 0) {
+      const ogImage = document.querySelector('meta[property="og:image"], meta[name="og:image"]');
+      if (ogImage) {
+        pushCandidate({
+          href: ogImage.getAttribute("content"),
+          source: "og:image"
+        });
       }
     }
 

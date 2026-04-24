@@ -262,6 +262,17 @@ function normalizeLookupUrl(rawUrl) {
   }
 }
 
+function urlContainsHintValue(rawUrl, hintValue) {
+  if (hintValue === null || hintValue === undefined) {
+    return false;
+  }
+  const normalizedHint = normalize(hintValue);
+  if (!normalizedHint) {
+    return false;
+  }
+  return normalize(rawUrl || "").includes(normalizedHint);
+}
+
 function buildWebsiteIconIndex(session) {
   const byPageUrl = new Map();
   const byOrigin = new Map();
@@ -603,6 +614,10 @@ async function analyzeResponses(sessionDir, options) {
         return;
       }
 
+      if (urlContainsHintValue(raw.url, options.hintValue) || urlContainsHintValue(raw.page_url, options.hintValue)) {
+        return;
+      }
+
       const { score, reasons } = scoreLeaf({
         value,
         parentKey,
@@ -682,6 +697,10 @@ async function analyzeDom(sessionDir, options) {
     const meta = JSON.parse(await fs.readFile(absolutePath, "utf8"));
     const domCatalog = Array.isArray(meta.dom_catalog) ? meta.dom_catalog : [];
     if (domCatalog.length === 0) {
+      continue;
+    }
+
+    if (urlContainsHintValue(meta.page_url, options.hintValue)) {
       continue;
     }
 
@@ -806,6 +825,10 @@ async function analyzeDom(sessionDir, options) {
       const html = await fs.readFile(absolutePath, "utf8");
       const index = html.toLowerCase().indexOf(String(options.hintValue).toLowerCase());
       if (index === -1) {
+        continue;
+      }
+
+      if (urlContainsHintValue(options.siteUrl, options.hintValue)) {
         continue;
       }
 

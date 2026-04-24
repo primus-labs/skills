@@ -58,6 +58,8 @@ When presenting or emitting a template, treat `Source URL` as the page URL that 
 
 For multi-field captures, also record the shared `Page URL` or interaction step that produced the full set. If one requested field is only available on another page load, mark the set as not jointly capturable instead of silently merging unrelated sources.
 
+Treat the browser address bar as public routing state, not as a valid data source. If the target value only appears because it is embedded in the page URL, query string, or hash fragment shown in the browser address bar, reject that candidate and continue looking for a network payload or rendered DOM field that exposes the value independently of the address bar.
+
 ## Selection Rules
 
 - Prefer current-account endpoints such as `viewer`, `me`, `account`, `settings`, or similar when the goal is to prove the logged-in user.
@@ -67,6 +69,7 @@ For multi-field captures, also record the shared `Page URL` or interaction step 
 - Do not treat GraphQL hash segments as stable. Match on operation name or path suffix instead.
 - When multiple fields are requested, prefer a set of endpoints that all fire during the same page load or stable page state. If field A appears on `api1` and field B appears on `api2`, both are valid only if both requests belong to that same captured page state.
 - For multi-endpoint answers, return each endpoint separately with its own field description and JSONPath. Example: `screen_name -> $.screen_name` from `api1`, and `user id -> $.profile.user.id` from `api2`.
+- Reject any candidate whose target sample value appears directly in the browser address bar URL, including the path, query string, or hash.
 - Treat DOM-only matches as a fallback and label them clearly as less stable than direct network data.
 - For HTML-only matches, set the request URL to the page's document URL and include the DOM XPath that exposed the value.
 - For HTML-only multi-field answers, return one field entry per target value with its own field description and XPath, but only if all XPaths come from the same page load or stable page state.
@@ -193,6 +196,8 @@ Interpret this schema as follows:
 - `requestTemplate.ext`: default to `{}`
 - `requestTemplate.dynamicParamters`: default to `[]` unless the user explicitly needs dynamic extraction rules
 - `requestTemplate.method`: the actual HTTP method such as `GET` or `POST`
+- If the target data is HTML-only, set `requestTemplate.ignoreResponse` to `true`.
+- Do not include `requestTemplate.ignoreResponse` for normal network-backed JSON responses.
 - `responseTemplate`: an array because one URL may expose multiple target values
 - `responseTemplate[].resolver.type`: always `JSON_PATH`
 - `responseTemplate[].resolver.expression`: use JSONPath when the source is JSON, and XPath when the source is HTML
@@ -213,6 +218,7 @@ When emitting the final request/response template:
 - Always return both `dataPageTemplate` and `dataSourceTemplate`.
 - Set `dataPageTemplate.baseUrl` to the page that triggered the chosen request. Do not use the request URL itself as `baseUrl`.
 - For HTML-only matches, set `dataPageTemplate.baseUrl` to the document page URL where the XPath was observed.
+- For HTML-only matches, set `requestTemplate.ignoreResponse` to `true`.
 - Group fields under the same object when they come from the same matched URL pattern and HTTP method.
 - If two requested fields come from different endpoints, emit two objects in the top-level array, one per endpoint.
 - For JSON responses, set `resolver.expression` to the exact JSONPath such as `$.screen_name` or `$.profile.user.id`.
