@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 function parseArgs(argv) {
   const args = {};
@@ -153,10 +154,20 @@ function inferFieldDataType(report, candidate) {
   }
 }
 
-function buildResponseTemplateEntry(report, candidate) {
+export function normalizeHtmlResolverExpression(expression) {
+  const raw = String(expression || "").trim();
+  if (!raw) {
+    return raw;
+  }
+
+  return raw.endsWith("?") ? raw : `${raw}?`;
+}
+
+export function buildResponseTemplateEntry(report, candidate) {
   const targetFieldName = report.target?.field_name || "";
   const fieldKey = inferFieldKey(candidate, targetFieldName);
-  const expression = candidate.json_path || candidate.html_xpath || candidate.html_selector || null;
+  const htmlExpression = candidate.html_xpath || candidate.html_selector || null;
+  const expression = candidate.json_path || (htmlExpression ? normalizeHtmlResolverExpression(htmlExpression) : null);
   if (!expression) {
     throw new Error("Selected candidate does not include a JSONPath or XPath expression");
   }
@@ -291,7 +302,9 @@ async function main() {
   console.log(JSON.stringify(templateDraft, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
