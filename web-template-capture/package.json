@@ -12,7 +12,8 @@
     "install:codex": "node scripts/install_skill.mjs",
     "capture:site": "node scripts/capture_site.mjs",
     "find:candidates": "node scripts/find_candidates.mjs",
-    "emit:template": "node scripts/emit_template.mjs"
+    "emit:template": "node scripts/emit_template.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "playwright": "^1.52.0"
