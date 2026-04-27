@@ -646,7 +646,6 @@ async function main() {
   const outputRoot = args["output-root"] || path.join(os.homedir(), ".web-template-capture", "artifacts");
   const sessionDir = path.join(outputRoot, siteSlug, sessionId);
   const responsesDir = path.join(sessionDir, "responses");
-  const domDir = path.join(sessionDir, "dom");
   const profileDir = args["profile-dir"] || path.join(os.homedir(), ".codex-playwright", "web-template-capture", siteSlug);
   const autoCloseMs = args["auto-close-ms"] ? Number(args["auto-close-ms"]) : null;
   const loginWaitMs = args["login-wait-ms"] ? Number(args["login-wait-ms"]) : 10 * 60 * 1000;
@@ -670,7 +669,6 @@ async function main() {
   });
 
   await ensureDir(responsesDir);
-  await ensureDir(domDir);
 
   const session = {
     site_url: siteUrl,
@@ -682,7 +680,6 @@ async function main() {
     page_urls: [],
     website_icons: [],
     response_count: 0,
-    dom_snapshots: [],
     interactions: []
   };
 
@@ -716,7 +713,6 @@ async function main() {
   });
 
   let responseCounter = 0;
-  let snapshotCounter = 0;
   const seenPageUrls = new Set();
   let activeInteraction = null;
   const responseEntries = [];
@@ -899,237 +895,6 @@ async function main() {
       .sort((left, right) => right.score - left.score);
   }
 
-  async function listDomCatalog() {
-    return page.evaluate(() => {
-      const clean = (value) => (value || "").replace(/\s+/g, " ").trim();
-      const isVisible = (element) => {
-        const style = window.getComputedStyle(element);
-        const rect = element.getBoundingClientRect();
-        return style.visibility !== "hidden" &&
-          style.display !== "none" &&
-          rect.width > 0 &&
-          rect.height > 0;
-      };
-      const buildSelector = (element) => {
-        if (!(element instanceof HTMLElement)) {
-          return null;
-        }
-        if (element.id) {
-          return `#${CSS.escape(element.id)}`;
-        }
-        const dataTestId = element.getAttribute("data-testid");
-        if (dataTestId) {
-          return `[data-testid="${CSS.escape(dataTestId)}"]`;
-        }
-        if (element instanceof HTMLAnchorElement && element.getAttribute("href")) {
-          return `a[href="${CSS.escape(element.getAttribute("href"))}"]`;
-        }
-
-        const parts = [];
-        let current = element;
-        while (current && current.tagName && current !== document.body) {
-          const tag = current.tagName.toLowerCase();
-          const parent = current.parentElement;
-          if (!parent) {
-            break;
-          }
-          const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
-          const index = siblings.indexOf(current) + 1;
-          parts.unshift(`${tag}:nth-of-type(${index})`);
-          current = parent;
-        }
-        return parts.length > 0 ? parts.join(" > ") : null;
-      };
-      const buildXPath = (element) => {
-        if (!(element instanceof Element)) {
-          return null;
-        }
-        if (element.id) {
-          return `//*[@id=${JSON.stringify(element.id)}]`;
-        }
-        const segments = [];
-        let current = element;
-        while (current && current.nodeType === Node.ELEMENT_NODE) {
-          const tag = current.tagName.toLowerCase();
-          const parent = current.parentElement;
-          if (!parent) {
-            segments.unshift(tag);
-            break;
-          }
-          const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
-          const index = siblings.indexOf(current) + 1;
-          segments.unshift(`${tag}[${index}]`);
-          current = parent;
-        }
-        return `/${segments.join("/")}`;
-      };
-      const xpathPattern = (xpath) => String(xpath || "").replace(/\[\d+\]/g, "[*]");
-      const hasMeaningfulChild = (element) => Array.from(element.children).some((child) => {
-        if (!(child instanceof HTMLElement) || !isVisible(child)) {
-          return false;
-        }
-        return clean(child.innerText || child.textContent || "").length > 0;
-      });
-
-      const selector = [
-        "a[href]",
-        "button",
-        "[role='button']",
-        "[role='tab']",
-        "[aria-label]",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "li",
-        "[role='listitem']",
-        "td",
-        "th",
-        "dt",
-        "dd",
-        "p",
-        "span",
-        "div"
-      ].join(", ");
-
-      const seen = new Set();
-      const entries = [];
-      const nodes = Array.from(document.querySelectorAll(selector));
-      for (const element of nodes) {
-        if (!(element instanceof HTMLElement) || !isVisible(element)) {
-          continue;
-        }
-
-        const tag = element.tagName.toLowerCase();
-        const text = clean(element.innerText || element.textContent || "");
-        const href = element instanceof HTMLAnchorElement ? element.href : "";
-        const ariaLabel = clean(element.getAttribute("aria-label"));
-        const title = clean(element.getAttribute("title"));
-        const role = clean(element.getAttribute("role"));
-        const dataViewName = clean(element.getAttribute("data-view-name"));
-        const dataTestId = clean(element.getAttribute("data-testid"));
-        const selectorValue = buildSelector(element);
-        const xpath = buildXPath(element);
-        const contextRoot = element.closest("li, tr, article, section, [role=listitem], [role=row], .card, [class*=card], [class*=panel]") || element.parentElement;
-        const contextText = clean(contextRoot?.innerText || "").slice(0, 320);
-        const interactiveDescendant = element.querySelector("a[href], button, [role='button'], [role='tab']");
-
-        if (!xpath || !selectorValue) {
-          continue;
-        }
-        if (!text && !href && !ariaLabel && !title) {
-          continue;
-        }
-        if (text.length > 240) {
-          continue;
-        }
-        if ((tag === "div" || tag === "span" || tag === "p") && hasMeaningfulChild(element)) {
-          continue;
-        }
-        if ((tag === "li" || role === "listitem") && interactiveDescendant && !href) {
-          continue;
-        }
-
-        const dedupeKey = [xpath, text, href, ariaLabel, title].join("|");
-        if (seen.has(dedupeKey)) {
-          continue;
-        }
-        seen.add(dedupeKey);
-
-        entries.push({
-          xpath,
-          xpath_pattern: xpathPattern(xpath),
-          selector: selectorValue,
-          tag,
-          role,
-          text,
-          href,
-          aria_label: ariaLabel,
-          title,
-          data_view_name: dataViewName,
-          data_test_id: dataTestId,
-          context_text: contextText
-        });
-      }
-
-      return entries.slice(0, 250);
-    });
-  }
-
-  async function saveDomSnapshot(reason) {
-    try {
-      const pageUrl = page.url();
-      if (!pageUrl || pageUrl === "about:blank") {
-        return;
-      }
-
-      snapshotCounter += 1;
-      const htmlName = `${String(snapshotCounter).padStart(3, "0")}_${sanitizeFileName(reason)}.html`;
-      const metaName = `${String(snapshotCounter).padStart(3, "0")}_${sanitizeFileName(reason)}.json`;
-      const htmlPath = path.join(domDir, htmlName);
-      const metaPath = path.join(domDir, metaName);
-      const clickCandidates = await listClickableCandidates();
-      const domCatalog = await listDomCatalog();
-      const html = await page.content();
-      const [title, text] = await Promise.all([
-        page.title().catch(() => ""),
-        page.locator("body").innerText().catch(() => "")
-      ]);
-      let iconInfo = await getWebsiteIcon(page);
-      if (!iconInfo?.website_icon) {
-        const fromHtml = extractWebsiteIconFromHtml(html, pageUrl);
-        if (fromHtml?.website_icon) {
-          iconInfo = fromHtml;
-        }
-      }
-      const websiteIcon = iconInfo?.website_icon || null;
-      const websiteIconMeta = iconInfo?.website_icon_meta || null;
-
-      await fs.writeFile(htmlPath, html);
-      await fs.writeFile(metaPath, JSON.stringify({
-        reason,
-        page_url: pageUrl,
-        title,
-        website_icon: websiteIcon,
-        website_icon_meta: websiteIconMeta,
-        text_excerpt: text.slice(0, 4000),
-        top_click_candidates: clickCandidates.slice(0, 15).map((candidate) => ({
-          selector: candidate.selector,
-          text: candidate.text,
-          aria_label: candidate.ariaLabel,
-          href: candidate.href,
-          score: candidate.score,
-          reasons: candidate.reasons
-        })),
-        dom_catalog: domCatalog
-      }, null, 2));
-
-      session.dom_snapshots.push({
-        page_url: pageUrl,
-        title,
-        reason,
-        website_icon: websiteIcon,
-        html_file: path.relative(sessionDir, htmlPath),
-        meta_file: path.relative(sessionDir, metaPath)
-      });
-      if (websiteIcon) {
-        const existing = session.website_icons.find((entry) => entry.page_url === pageUrl);
-        if (existing) {
-          existing.website_icon = websiteIcon;
-          existing.website_icon_meta = websiteIconMeta;
-        } else {
-          session.website_icons.push({
-            page_url: pageUrl,
-            website_icon: websiteIcon,
-            website_icon_meta: websiteIconMeta
-          });
-        }
-      }
-    } catch (error) {
-      console.error(`Failed to save DOM snapshot (${reason}): ${error.message}`);
-    }
-  }
-
   page.on("framenavigated", (frame) => {
     if (frame !== page.mainFrame()) {
       return;
@@ -1140,7 +905,22 @@ async function main() {
       session.page_urls.push(currentUrl);
     }
     console.log(`Visited: ${currentUrl}`);
-    void page.waitForTimeout(1500).then(() => saveDomSnapshot("navigation")).catch(() => {});
+    void getWebsiteIcon(page).then((iconInfo) => {
+      if (!iconInfo?.website_icon) {
+        return;
+      }
+      const existing = session.website_icons.find((entry) => entry.page_url === currentUrl);
+      if (existing) {
+        existing.website_icon = iconInfo.website_icon;
+        existing.website_icon_meta = iconInfo.website_icon_meta;
+        return;
+      }
+      session.website_icons.push({
+        page_url: currentUrl,
+        website_icon: iconInfo.website_icon,
+        website_icon_meta: iconInfo.website_icon_meta
+      });
+    }).catch(() => {});
   });
 
   page.on("response", async (response) => {
@@ -1148,6 +928,37 @@ async function main() {
       const request = response.request();
       const resourceType = request.resourceType();
       const contentType = response.headers()["content-type"] || "";
+      if (resourceType === "document" && contentType.includes("text/html")) {
+        const html = await response.text();
+        responseCounter += 1;
+        session.response_count = responseCounter;
+        const operationName = extractOperationName(response.url());
+        const bodyFile = `${String(responseCounter).padStart(4, "0")}_${sanitizeFileName(operationName)}.html`;
+        const metaFile = `${String(responseCounter).padStart(4, "0")}_${sanitizeFileName(operationName)}.json`;
+        await fs.writeFile(path.join(responsesDir, bodyFile), html);
+        await fs.writeFile(path.join(responsesDir, metaFile), JSON.stringify({
+          captured_at: new Date().toISOString(),
+          page_url: page.url(),
+          active_interaction: activeInteraction,
+          url: response.url(),
+          method: request.method(),
+          status: response.status(),
+          operation_name: operationName,
+          resource_type: resourceType,
+          content_type: contentType,
+          headers: response.headers(),
+          body_file: bodyFile
+        }, null, 2));
+        responseEntries.push({
+          file: metaFile,
+          url: response.url(),
+          operation_name: operationName,
+          active_interaction: activeInteraction
+        });
+        console.log(`Captured HTML document: ${response.url()}`);
+        return;
+      }
+
       if (!(resourceType === "xhr" || resourceType === "fetch")) {
         return;
       }
@@ -1225,7 +1036,6 @@ async function main() {
       try {
         await page.locator(next.selector).first().click({ timeout: 5000 });
         await page.waitForTimeout(settleMs);
-        await saveDomSnapshot(label);
       } catch (error) {
         session.interactions.push({
           label,
@@ -1313,7 +1123,6 @@ async function main() {
         authSignalsPresent
       })) {
         await page.waitForTimeout(settleMs);
-        await saveDomSnapshot("post_login_resume");
         return true;
       }
       await page.waitForTimeout(1000);

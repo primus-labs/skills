@@ -156,7 +156,7 @@ function inferFieldDataType(report, candidate) {
 function buildResponseTemplateEntry(report, candidate) {
   const targetFieldName = report.target?.field_name || "";
   const fieldKey = inferFieldKey(candidate, targetFieldName);
-  const expression = candidate.json_path || candidate.dom_xpath || candidate.dom_selector || null;
+  const expression = candidate.json_path || candidate.html_xpath || candidate.html_selector || null;
   if (!expression) {
     throw new Error("Selected candidate does not include a JSONPath or XPath expression");
   }
@@ -180,7 +180,7 @@ function buildResponseTemplateEntry(report, candidate) {
 }
 
 function isHtmlOnlyCandidate(candidate) {
-  return candidate?.source_type === "dom" || (!candidate?.json_path && Boolean(candidate?.dom_xpath || candidate?.dom_selector));
+  return candidate?.source_type === "document_html" || (!candidate?.json_path && Boolean(candidate?.html_xpath || candidate?.html_selector));
 }
 
 async function main() {
@@ -233,7 +233,7 @@ async function main() {
       source_type: item.source_type,
       request_url_pattern: item.request_url_pattern || item.request_url || item.page_url || null,
       json_path: item.json_path || null,
-      dom_xpath: item.dom_xpath || item.dom_selector || null,
+      html_xpath: item.html_xpath || item.html_selector || null,
       score: item.score,
       reasons: item.reasons
     }));
@@ -266,9 +266,9 @@ async function main() {
     },
     field: {
       json_path: candidate.json_path || null,
-      dom_selector: candidate.dom_selector || null,
-      dom_xpath: candidate.dom_xpath || null,
-      dom_item_xpath: candidate.dom_item_xpath || null,
+      html_selector: candidate.html_selector || null,
+      html_xpath: candidate.html_xpath || null,
+      html_item_xpath: candidate.html_item_xpath || null,
       value_attribute: candidate.value_attribute || null,
       sample_value: candidate.sample_value
     },
@@ -279,8 +279,8 @@ async function main() {
     alternatives,
     notes: [
       candidate.request_url ? `Observed request: ${candidate.request_url}` : "Observed in DOM snapshot only",
-      candidate.dom_xpath ? `Observed DOM XPath: ${candidate.dom_xpath}` : "No DOM XPath recorded for this candidate",
-      candidate.value_attribute ? `Read extracted value from: ${candidate.value_attribute}` : "No explicit DOM value attribute recorded",
+      candidate.html_xpath ? `Observed HTML XPath: ${candidate.html_xpath}` : "No HTML XPath recorded for this candidate",
+      candidate.value_attribute ? `Read extracted value from: ${candidate.value_attribute}` : "No explicit HTML value attribute recorded",
       sourceUrl ? `Observed while on page: ${sourceUrl}` : "No page URL recorded for this candidate",
       candidate.file ? `Evidence file: ${candidate.file}` : "No evidence file recorded"
     ]

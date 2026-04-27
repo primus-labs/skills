@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 function parseArgs(argv) {
   const args = {};
@@ -22,6 +23,10 @@ function parseArgs(argv) {
 
 function normalize(value) {
   return String(value).trim().toLowerCase();
+}
+
+function normalizeWhitespace(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
 
 function tokenize(value) {
@@ -662,8 +667,8 @@ function dedupeCandidates(candidates) {
       candidate.source_type,
       candidate.request_url_pattern || "",
       candidate.json_path || "",
-      candidate.dom_selector || "",
-      candidate.dom_xpath || "",
+      candidate.html_selector || "",
+      candidate.html_xpath || "",
       candidate.value_attribute || "",
       candidate.page_url || ""
     ].join("|");
@@ -678,34 +683,168 @@ function dedupeCandidates(candidates) {
   return [...byKey.values()];
 }
 
-async function analyzeDom(sessionDir, options) {
-  const domDir = path.join(sessionDir, "dom");
-  let names = [];
-  try {
-    names = await fs.readdir(domDir);
-  } catch {
-    return [];
+function decodeHtmlEntities(value) {
+  return String(value || "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'");
+}
+
+function stripTags(value) {
+  return decodeHtmlEntities(String(value || "").replace(/<[^>]+>/g, " "));
+}
+
+function readAttribute(attributes, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [
+    new RegExp(`\\b${escaped}\\s*=\\s*"([^"]*)"`, "i"),
+    new RegExp(`\\b${escaped}\\s*=\\s*'([^']*)'`, "i"),
+    new RegExp(`\\b${escaped}\\s*=\\s*([^\\s>]+)`, "i")
+  ];
+  for (const pattern of patterns) {
+    const match = attributes.match(pattern);
+    if (match) {
+      return decodeHtmlEntities(match[1].trim());
+    }
+  }
+  return "";
+}
+
+function escapeXPathLiteral(value) {
+  const raw = String(value || "");
+  if (!raw.includes("\"")) {
+    return `"${raw}"`;
+  }
+  if (!raw.includes("'")) {
+    return `'${raw}'`;
+  }
+  const parts = raw.split("\"");
+  const quoted = [];
+  for (let index = 0; index < parts.length; index += 1) {
+    quoted.push(`"${parts[index]}"`);
+    if (index < parts.length - 1) {
+      quoted.push("'\"'");
+    }
+  }
+  return `concat(${quoted.join(", ")})`;
+}
+
+function buildHtmlLocator(tag, attributes, text) {
+  const id = readAttribute(attributes, "id");
+  if (id) {
+    return {
+      xpath: `//*[@id=${escapeXPathLiteral(id)}]`,
+      selector: `#${id}`
+    };
   }
 
-  const candidates = [];
-  const metaNames = names.filter((item) => item.endsWith(".json")).sort();
-  const htmlNames = names.filter((item) => item.endsWith(".html")).sort();
-  const fieldProfile = buildFieldProfile(options.fieldName);
-  const listLikeField = isListLikeField(options.fieldName);
-  for (const name of metaNames) {
-    const absolutePath = path.join(domDir, name);
-    const meta = JSON.parse(await fs.readFile(absolutePath, "utf8"));
-    const domCatalog = Array.isArray(meta.dom_catalog) ? meta.dom_catalog : [];
-    if (domCatalog.length === 0) {
+  for (const attributeName of ["data-testid", "data-test-id", "name", "aria-label", "title"]) {
+    const attributeValue = readAttribute(attributes, attributeName);
+    if (attributeValue) {
+      return {
+        xpath: `//${tag}[@${attributeName}=${escapeXPathLiteral(attributeValue)}]`,
+        selector: `${tag}[${attributeName}="${attributeValue}"]`
+      };
+    }
+  }
+
+  const href = readAttribute(attributes, "href");
+  if (href) {
+    return {
+      xpath: `//${tag}[@href=${escapeXPathLiteral(href)}]`,
+      selector: `${tag}[href="${href}"]`
+    };
+  }
+
+  const normalizedText = normalizeWhitespace(text);
+  if (normalizedText) {
+    return {
+      xpath: `//${tag}[normalize-space()=${escapeXPathLiteral(normalizedText)}]`,
+      selector: null
+    };
+  }
+
+  return { xpath: null, selector: null };
+}
+
+function extractHtmlCatalog(html) {
+  const entryPattern = /<([a-z][a-z0-9:-]*)([^>]*)>\s*([^<]{1,240}?)\s*<\/\1>/gi;
+  const entries = [];
+  const seen = new Set();
+  let match;
+
+  while ((match = entryPattern.exec(String(html || ""))) !== null) {
+    const tag = match[1].toLowerCase();
+    const attributes = match[2] || "";
+    const text = normalizeWhitespace(decodeHtmlEntities(match[3] || ""));
+    if (!text || text.length > 240) {
       continue;
     }
 
-    if (urlContainsHintValue(meta.page_url, options.hintValue)) {
+    const href = readAttribute(attributes, "href");
+    const ariaLabel = readAttribute(attributes, "aria-label");
+    const title = readAttribute(attributes, "title");
+    const dataTestId = readAttribute(attributes, "data-testid") || readAttribute(attributes, "data-test-id");
+    const { xpath, selector } = buildHtmlLocator(tag, attributes, text);
+    if (!xpath) {
+      continue;
+    }
+
+    const key = [tag, xpath, text, href, ariaLabel, title].join("|");
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+
+    entries.push({
+      xpath,
+      xpath_pattern: xpath,
+      xpath_pattern_count: 1,
+      selector,
+      tag,
+      role: readAttribute(attributes, "role"),
+      text,
+      href,
+      aria_label: ariaLabel,
+      title,
+      data_test_id: dataTestId,
+      context_text: text
+    });
+  }
+
+  return entries;
+}
+
+async function analyzeHtmlResponses(sessionDir, options) {
+  const responsesDir = path.join(sessionDir, "responses");
+  const responseFiles = await listJsonFiles(responsesDir);
+  const candidates = [];
+  const fieldProfile = buildFieldProfile(options.fieldName);
+  const listLikeField = isListLikeField(options.fieldName);
+  for (const fileName of responseFiles) {
+    const absolutePath = path.join(responsesDir, fileName);
+    const raw = JSON.parse(await fs.readFile(absolutePath, "utf8"));
+    const contentType = normalize(raw.content_type || "");
+    if (!contentType.includes("text/html") || !raw.body_file) {
+      continue;
+    }
+
+    const bodyPath = path.join(responsesDir, raw.body_file);
+    const html = await fs.readFile(bodyPath, "utf8").catch(() => "");
+    const htmlCatalog = extractHtmlCatalog(html);
+    if (htmlCatalog.length === 0) {
+      continue;
+    }
+
+    if (urlContainsHintValue(raw.url, options.hintValue) || urlContainsHintValue(raw.page_url, options.hintValue)) {
       continue;
     }
 
     const patternCounts = new Map();
-    for (const node of domCatalog) {
+    for (const node of htmlCatalog) {
       const key = node.xpath_pattern || node.xpath || "";
       if (!key) {
         continue;
@@ -713,14 +852,14 @@ async function analyzeDom(sessionDir, options) {
       patternCounts.set(key, (patternCounts.get(key) || 0) + 1);
     }
 
-    for (const node of domCatalog) {
+    for (const node of htmlCatalog) {
       const enrichedNode = {
         ...node,
         xpath_pattern_count: patternCounts.get(node.xpath_pattern || node.xpath || "") || 1
       };
       const { score, reasons } = scoreDomCandidate({
         node: enrichedNode,
-        pageUrl: meta.page_url,
+        pageUrl: raw.page_url,
         fieldProfile,
         fieldName: options.fieldName,
         hintValue: options.hintValue,
@@ -733,31 +872,30 @@ async function analyzeDom(sessionDir, options) {
 
       const sampleValue = enrichedNode.text || enrichedNode.href || options.hintValue || null;
       candidates.push({
-        source_type: "html_dom",
+        source_type: "document_html",
         score,
-        reasons: dedupeReasons([...reasons, "value observed in rendered HTML DOM"]),
+        reasons: dedupeReasons([...reasons, "value observed in original HTML response"]),
         request_method: "GET",
-        request_url: meta.page_url || null,
-        request_url_pattern: meta.page_url || null,
+        request_url: raw.url || null,
+        request_url_pattern: raw.url || null,
         operation_name: null,
         json_path: null,
-        dom_selector: enrichedNode.selector || null,
-        dom_xpath: enrichedNode.xpath || null,
-        dom_xpath_pattern: enrichedNode.xpath_pattern || null,
+        html_selector: enrichedNode.selector || null,
+        html_xpath: enrichedNode.xpath || null,
+        html_xpath_pattern: enrichedNode.xpath_pattern || null,
         sample_value: sampleValue,
-        page_url: meta.page_url || null,
-        website_icon: lookupWebsiteIcon(options.iconIndex, meta.page_url, options.siteUrl),
-        file: path.relative(sessionDir, absolutePath)
+        page_url: raw.page_url || raw.url || null,
+        website_icon: lookupWebsiteIcon(options.iconIndex, raw.page_url, raw.url, options.siteUrl),
+        file: path.relative(sessionDir, bodyPath)
       });
     }
 
     if (listLikeField) {
       const groupedNodes = new Map();
-      for (const node of domCatalog) {
+      for (const node of htmlCatalog) {
         const key = [
           node.tag || "",
           node.xpath_pattern || "",
-          node.data_view_name || "",
           node.data_test_id || "",
           node.href ? "href" : "text"
         ].join("|");
@@ -785,7 +923,7 @@ async function analyzeDom(sessionDir, options) {
         const { score, reasons } = scoreDomListCandidate({
           nodes,
           listXPath,
-          pageUrl: meta.page_url,
+          pageUrl: raw.page_url || raw.url,
           fieldProfile,
           fieldName: options.fieldName,
           ownershipMode: options.ownershipMode,
@@ -797,62 +935,73 @@ async function analyzeDom(sessionDir, options) {
         }
 
         candidates.push({
-          source_type: "html_dom",
+          source_type: "document_html",
           score,
-          reasons: dedupeReasons([...reasons, "grouped as a full DOM list extraction"]),
+          reasons: dedupeReasons([...reasons, "grouped as a full HTML response extraction"]),
           request_method: "GET",
-          request_url: meta.page_url || null,
-          request_url_pattern: meta.page_url || null,
+          request_url: raw.url || null,
+          request_url_pattern: raw.url || null,
           operation_name: null,
           json_path: null,
-          dom_selector: null,
-          dom_xpath: listXPath,
-          dom_xpath_pattern: nodes[0].xpath_pattern || null,
-          dom_item_xpath: nodes[0].xpath_pattern || null,
+          html_selector: null,
+          html_xpath: listXPath,
+          html_xpath_pattern: nodes[0].xpath_pattern || null,
+          html_item_xpath: nodes[0].xpath_pattern || null,
           value_attribute: valueAttribute,
           sample_value: values.slice(0, 10),
-          page_url: meta.page_url || null,
-          website_icon: lookupWebsiteIcon(options.iconIndex, meta.page_url, options.siteUrl),
-          file: path.relative(sessionDir, absolutePath)
+          page_url: raw.page_url || raw.url || null,
+          website_icon: lookupWebsiteIcon(options.iconIndex, raw.page_url, raw.url, options.siteUrl),
+          file: path.relative(sessionDir, bodyPath)
         });
       }
     }
   }
-
-  if (candidates.length === 0 && options.hintValue !== null) {
-    for (const name of htmlNames) {
-      const absolutePath = path.join(domDir, name);
-      const html = await fs.readFile(absolutePath, "utf8");
-      const index = html.toLowerCase().indexOf(String(options.hintValue).toLowerCase());
-      if (index === -1) {
-        continue;
-      }
-
-      if (urlContainsHintValue(options.siteUrl, options.hintValue)) {
-        continue;
-      }
-
-      candidates.push({
-        source_type: "html_dom",
-        score: 20,
-        reasons: ["exact value found in legacy DOM snapshot", "xpath unavailable for this older capture"],
-        request_method: "GET",
-        request_url: null,
-        request_url_pattern: null,
-        operation_name: null,
-        json_path: null,
-        dom_selector: null,
-        dom_xpath: null,
-        dom_xpath_pattern: null,
-        sample_value: options.hintValue,
-        page_url: null,
-        website_icon: lookupWebsiteIcon(options.iconIndex, options.siteUrl),
-        file: path.relative(sessionDir, absolutePath)
-      });
-    }
-  }
-
   return candidates;
+}
+
+export async function collectCandidatesForSession({
+  sessionDir,
+  fieldName,
+  fieldType,
+  hintValue = null,
+  ownershipMode = "page_subject"
+}) {
+  const session = JSON.parse(await fs.readFile(path.join(sessionDir, "session.json"), "utf8"));
+  const iconIndex = buildWebsiteIconIndex(session);
+
+  const networkCandidates = await analyzeResponses(sessionDir, {
+    fieldName,
+    fieldType,
+    hintValue,
+    ownershipMode,
+    iconIndex,
+    siteUrl: session.site_url
+  });
+  const htmlCandidates = await analyzeHtmlResponses(sessionDir, {
+    fieldName,
+    hintValue,
+    ownershipMode,
+    iconIndex,
+    siteUrl: session.site_url
+  });
+
+  const candidates = dedupeCandidates([...networkCandidates, ...htmlCandidates])
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 50);
+
+  return {
+    generated_at: new Date().toISOString(),
+    session_dir: sessionDir,
+    target: {
+      field_name: fieldName,
+      field_type: fieldType,
+      hint_value: hintValue,
+      ownership_mode: ownershipMode
+    },
+    site_url: session.site_url,
+    website_icon: lookupWebsiteIcon(iconIndex, session.site_url),
+    top_candidates: candidates
+  };
 }
 
 async function main() {
@@ -868,51 +1017,21 @@ async function main() {
     throw new Error("Missing required --field-name or --field-type");
   }
 
-  const ownershipMode = args["ownership-mode"] || "page_subject";
-  const hintValue = Object.prototype.hasOwnProperty.call(args, "hint-value") ? args["hint-value"] : null;
-  const session = JSON.parse(await fs.readFile(path.join(sessionDir, "session.json"), "utf8"));
-  const iconIndex = buildWebsiteIconIndex(session);
-
-  const networkCandidates = await analyzeResponses(sessionDir, {
+  const report = await collectCandidatesForSession({
+    sessionDir,
     fieldName,
     fieldType,
-    hintValue,
-    ownershipMode,
-    iconIndex,
-    siteUrl: session.site_url
+    hintValue: Object.prototype.hasOwnProperty.call(args, "hint-value") ? args["hint-value"] : null,
+    ownershipMode: args["ownership-mode"] || "page_subject"
   });
-  const domCandidates = await analyzeDom(sessionDir, {
-    fieldName,
-    hintValue,
-    ownershipMode,
-    iconIndex,
-    siteUrl: session.site_url
-  });
-
-  const candidates = dedupeCandidates([...networkCandidates, ...domCandidates])
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 50);
-
-  const report = {
-    generated_at: new Date().toISOString(),
-    session_dir: sessionDir,
-    target: {
-      field_name: fieldName,
-      field_type: fieldType,
-      hint_value: hintValue,
-      ownership_mode: ownershipMode
-    },
-    site_url: session.site_url,
-    website_icon: lookupWebsiteIcon(iconIndex, session.site_url),
-    top_candidates: candidates
-  };
-
   const reportPath = path.join(sessionDir, "candidate-report.json");
   await fs.writeFile(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
