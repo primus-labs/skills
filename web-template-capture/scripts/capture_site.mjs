@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 async function loadChromium() {
   try {
@@ -88,6 +89,16 @@ const SAFE_DISCOVERY_TERMS = [
 const LOGIN_URL_PATTERNS = [
   /\/login\b/i,
   /\/signin\b/i,
+  /\/sign-in\b/i,
+  /\/sessions\/two-factor(?:\/|$)/i,
+  /\/two-factor(?:\/|$)/i,
+  /\/2fa(?:\/|$)/i,
+  /\/otp(?:\/|$)/i,
+  /\/session\b/i,
+  /\/verify\b/i,
+  /\/verification\b/i,
+  /\/challenge\b/i,
+  /\/checkpoint\b/i,
   /authcenter/i,
   /accounts\./i
 ];
@@ -545,9 +556,81 @@ async function getWebsiteIcon(page) {
   }));
 }
 
-function isLikelyLoginUrl(value) {
+export function isAuthenticationInProgressUrl(value) {
   const url = String(value || "");
   return LOGIN_URL_PATTERNS.some((pattern) => pattern.test(url));
+}
+
+export function isReadyToResumeAfterAuthentication({ currentUrl, entryUrl, authSignalsPresent = false }) {
+  const rawUrl = String(currentUrl || "");
+  if (!rawUrl || authSignalsPresent || isAuthenticationInProgressUrl(rawUrl)) {
+    return false;
+  }
+
+  try {
+    const current = new URL(rawUrl);
+    const entry = entryUrl ? new URL(entryUrl) : null;
+    if (!entry) {
+      return true;
+    }
+
+    if (current.origin !== entry.origin) {
+      return false;
+    }
+
+    const currentRoute = `${current.pathname}${current.search}${current.hash}`;
+    const entryRoute = `${entry.pathname}${entry.search}${entry.hash}`;
+
+    if (currentRoute !== entryRoute) {
+      return true;
+    }
+
+    return current.pathname === "/" || current.pathname === "";
+  } catch {
+    return false;
+  }
+}
+
+async function detectAuthenticationSignals(page) {
+  return page.evaluate(() => {
+    const isVisible = (element) => {
+      if (!(element instanceof HTMLElement)) {
+        return false;
+      }
+      const style = window.getComputedStyle(element);
+      if (style.visibility === "hidden" || style.display === "none") {
+        return false;
+      }
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    const passwordField = document.querySelector('input[type="password"]');
+    if (passwordField && isVisible(passwordField)) {
+      return true;
+    }
+
+    const otpSelector = [
+      'input[autocomplete="one-time-code"]',
+      'input[name*="otp" i]',
+      'input[id*="otp" i]',
+      'input[name*="two_factor" i]',
+      'input[id*="two_factor" i]',
+      'input[name*="verification" i]',
+      'input[id*="verification" i]',
+      'input[name*="authenticator" i]',
+      'input[id*="authenticator" i]',
+      'input[name*="security_code" i]',
+      'input[id*="security_code" i]'
+    ].join(", ");
+    const otpField = document.querySelector(otpSelector);
+    if (otpField && isVisible(otpField)) {
+      return true;
+    }
+
+    const authText = (document.body?.innerText || "").toLowerCase();
+    return /(two-factor|two factor|verification code|security code|one-time code|authenticator app|enter the code)/i.test(authText);
+  }).catch(() => false);
 }
 
 async function main() {
@@ -1162,7 +1245,27 @@ async function main() {
         continue;
       }
 
-      const afterUrl = page.url();
+      let afterUrl = page.url();
+      let resumedFromAuthentication = false;
+
+      if (isAuthenticationInProgressUrl(afterUrl)) {
+        console.log("Login page detected during auto-explore. Complete login manually; exploration will resume after login.");
+        const resumed = await waitForLoginCompletion();
+        resumedFromAuthentication = resumed;
+        session.interactions.push({
+          label: `${label}_login_pause`,
+          before_url: afterUrl,
+          after_url: page.url(),
+          new_responses: 0,
+          status: resumed ? "login_resumed" : "login_wait_timed_out"
+        });
+        if (!resumed) {
+          activeInteraction = null;
+          return;
+        }
+        afterUrl = page.url();
+      }
+
       const newResponses = responseEntries.slice(responsesBefore).map((entry) => ({
         file: entry.file,
         url: entry.url,
@@ -1180,26 +1283,10 @@ async function main() {
         after_url: afterUrl,
         new_responses: responseCounter - responsesBefore,
         response_files: newResponses,
-        status: "clicked"
+        status: resumedFromAuthentication ? "clicked_after_login_resume" : "clicked"
       });
 
-      if (isLikelyLoginUrl(afterUrl)) {
-        console.log("Login page detected during auto-explore. Complete login manually; exploration will resume after login.");
-        const resumed = await waitForLoginCompletion();
-        session.interactions.push({
-          label: `${label}_login_pause`,
-          before_url: afterUrl,
-          after_url: page.url(),
-          new_responses: 0,
-          status: resumed ? "login_resumed" : "login_wait_timed_out"
-        });
-        if (!resumed) {
-          activeInteraction = null;
-          return;
-        }
-      }
-
-      if (afterUrl !== beforeUrl) {
+      if (!resumedFromAuthentication && afterUrl !== beforeUrl) {
         try {
           await page.goBack({ waitUntil: "domcontentloaded", timeout: 10000 });
           await page.waitForTimeout(settleMs);
@@ -1219,7 +1306,12 @@ async function main() {
         return false;
       }
       const currentUrl = page.url();
-      if (!isLikelyLoginUrl(currentUrl)) {
+      const authSignalsPresent = await detectAuthenticationSignals(page);
+      if (isReadyToResumeAfterAuthentication({
+        currentUrl,
+        entryUrl: siteUrl,
+        authSignalsPresent
+      })) {
         await page.waitForTimeout(settleMs);
         await saveDomSnapshot("post_login_resume");
         return true;
@@ -1234,7 +1326,7 @@ async function main() {
   await page.goto(siteUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
   if (autoExplore) {
     await page.waitForTimeout(settleMs);
-    if (isLikelyLoginUrl(page.url())) {
+    if (isAuthenticationInProgressUrl(page.url())) {
       console.log("Login page detected. Complete login manually; auto-exploration is paused until login finishes.");
       const resumed = await waitForLoginCompletion();
       if (!resumed) {
@@ -1267,7 +1359,9 @@ async function main() {
   console.log(`Capture complete. Session saved to ${sessionDir}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
