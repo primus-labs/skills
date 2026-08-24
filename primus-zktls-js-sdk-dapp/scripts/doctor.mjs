@@ -98,9 +98,11 @@ check('verifyAttestation() is called',
   main.includes('verifyAttestation('),
   'Must call primusZKTLS.verifyAttestation(attestation) and check the result before business logic.');
 
-check('verifyAttestation result is checked (=== true)',
-  main.includes('verifyResult') || main.includes('verifyAttestation'),
-  'Never skip verifyAttestation(). Always check if it returns true.');
+check('verifyAttestation result is checked',
+
+/(?:const|let|var)\s+\w+\s*=\s*await\s+primusZKTLS\.verifyAttestation\([\s\S]*?\bif\s*\(\s*!\w+\s*\)/.test(main),
+
+'Store the result of verifyAttestation() and check that result before business logic.');
 
 check('attestation.data is parsed',
   main.includes('JSON.parse') && (main.includes('attestation.data') || main.includes('.data')),
