@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const skillDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const skillDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const skillPath = path.join(skillDir, "SKILL.md");
 const usagePath = path.join(skillDir, "references", "usage-guide.md");
 
