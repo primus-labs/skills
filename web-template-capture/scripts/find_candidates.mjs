@@ -732,12 +732,94 @@ function escapeXPathLiteral(value) {
   return `concat(${quoted.join(", ")})`;
 }
 
+const VOID_ELEMENTS = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr"
+]);
+
+const OPTIONAL_CLOSE_TAGS = {
+  li: new Set(["li"]),
+  p: new Set(["p"]),
+  tr: new Set(["tr"]),
+  td: new Set(["td", "th"]),
+  th: new Set(["td", "th"]),
+  option: new Set(["option"]),
+  thead: new Set(["tbody", "tfoot"]),
+  tbody: new Set(["tbody", "tfoot"]),
+  tfoot: new Set(["tbody"])
+};
+
+function tokenizeHtmlTags(html) {
+  const events = [];
+  const tagPattern = /<!--[\s\S]*?-->|<([a-z][a-z0-9:-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>|<\/\s*([a-z][a-z0-9:-]*)\s*>/gi;
+  let tagMatch;
+
+  while ((tagMatch = tagPattern.exec(String(html || ""))) !== null) {
+    if (tagMatch[1]) {
+      const tag = tagMatch[1].toLowerCase();
+      events.push({
+        index: tagMatch.index,
+        type: "start",
+        tag,
+        id: readAttribute(tagMatch[2] || "", "id"),
+        selfClosing: Boolean(tagMatch[3]) || VOID_ELEMENTS.has(tag)
+      });
+    } else if (tagMatch[4]) {
+      events.push({
+        index: tagMatch.index,
+        type: "end",
+        tag: tagMatch[4].toLowerCase()
+      });
+    }
+  }
+
+  return events;
+}
+
+function popToMatchingTag(stack, tag) {
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    if (stack[index].tag === tag) {
+      stack.length = index;
+      return;
+    }
+  }
+}
+
+function applyOptionalClose(stack, tag) {
+  const closableTags = OPTIONAL_CLOSE_TAGS[tag];
+  while (closableTags && stack.length > 0 && closableTags.has(stack[stack.length - 1].tag)) {
+    stack.pop();
+  }
+}
+
+function nearestAncestorScope(stack) {
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    if (stack[index].id) {
+      return `//*[@id=${escapeXPathLiteral(stack[index].id)}]`;
+    }
+  }
+  return "";
+}
+
 function buildHtmlLocator(tag, attributes, text) {
   const id = readAttribute(attributes, "id");
   if (id) {
     return {
       xpath: `//*[@id=${escapeXPathLiteral(id)}]`,
-      selector: `#${id}`
+      selector: `#${id}`,
+      patternPredicate: null
     };
   }
 
@@ -746,7 +828,8 @@ function buildHtmlLocator(tag, attributes, text) {
     if (attributeValue) {
       return {
         xpath: `//${tag}[@${attributeName}=${escapeXPathLiteral(attributeValue)}]`,
-        selector: `${tag}[${attributeName}="${attributeValue}"]`
+        selector: `${tag}[${attributeName}="${attributeValue}"]`,
+        patternPredicate: `[@${attributeName}]`
       };
     }
   }
@@ -755,7 +838,8 @@ function buildHtmlLocator(tag, attributes, text) {
   if (href) {
     return {
       xpath: `//${tag}[@href=${escapeXPathLiteral(href)}]`,
-      selector: `${tag}[href="${href}"]`
+      selector: `${tag}[href="${href}"]`,
+      patternPredicate: "[@href]"
     };
   }
 
@@ -763,20 +847,40 @@ function buildHtmlLocator(tag, attributes, text) {
   if (normalizedText) {
     return {
       xpath: `//${tag}[normalize-space()=${escapeXPathLiteral(normalizedText)}]`,
-      selector: null
+      selector: null,
+      patternPredicate: "[normalize-space()]"
     };
   }
 
-  return { xpath: null, selector: null };
+  return { xpath: null, selector: null, patternPredicate: null };
 }
 
 function extractHtmlCatalog(html) {
-  const entryPattern = /<([a-z][a-z0-9:-]*)([^>]*)>\s*([^<]{1,240}?)\s*<\/\1>/gi;
+  const htmlText = String(html || "");
+  const entryPattern = /<([a-z][a-z0-9:-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>\s*([^<]{1,240}?)\s*<\/\1>/gi;
   const entries = [];
   const seen = new Set();
+  const tagEvents = tokenizeHtmlTags(htmlText);
+  const openElements = [];
+  let eventIndex = 0;
   let match;
 
-  while ((match = entryPattern.exec(String(html || ""))) !== null) {
+  function syncOpenElements(untilIndex) {
+    while (eventIndex < tagEvents.length && tagEvents[eventIndex].index < untilIndex) {
+      const event = tagEvents[eventIndex];
+      eventIndex += 1;
+      if (event.type === "end") {
+        popToMatchingTag(openElements, event.tag);
+        continue;
+      }
+      applyOptionalClose(openElements, event.tag);
+      if (!event.selfClosing) {
+        openElements.push(event);
+      }
+    }
+  }
+
+  while ((match = entryPattern.exec(htmlText)) !== null) {
     const tag = match[1].toLowerCase();
     const attributes = match[2] || "";
     const text = normalizeWhitespace(decodeHtmlEntities(match[3] || ""));
@@ -784,14 +888,20 @@ function extractHtmlCatalog(html) {
       continue;
     }
 
+    syncOpenElements(match.index);
+
     const href = readAttribute(attributes, "href");
     const ariaLabel = readAttribute(attributes, "aria-label");
     const title = readAttribute(attributes, "title");
     const dataTestId = readAttribute(attributes, "data-testid") || readAttribute(attributes, "data-test-id");
-    const { xpath, selector } = buildHtmlLocator(tag, attributes, text);
+    const { xpath, selector, patternPredicate } = buildHtmlLocator(tag, attributes, text);
     if (!xpath) {
       continue;
     }
+
+    const scope = nearestAncestorScope(openElements);
+    const xpathPattern = patternPredicate ? `${scope}//${tag}${patternPredicate}` : xpath;
+    const listPattern = `${scope}//${tag}${href ? "[@href]" : "[normalize-space()]"}`;
 
     const key = [tag, xpath, text, href, ariaLabel, title].join("|");
     if (seen.has(key)) {
@@ -801,7 +911,8 @@ function extractHtmlCatalog(html) {
 
     entries.push({
       xpath,
-      xpath_pattern: xpath,
+      xpath_pattern: xpathPattern,
+      list_pattern: listPattern,
       xpath_pattern_count: 1,
       selector,
       tag,
@@ -853,9 +964,12 @@ async function analyzeHtmlResponses(sessionDir, options) {
     }
 
     for (const node of htmlCatalog) {
+      const patternKey = node.xpath_pattern || node.xpath || "";
       const enrichedNode = {
         ...node,
-        xpath_pattern_count: patternCounts.get(node.xpath_pattern || node.xpath || "") || 1
+        // Repeated-locator scoring is only meaningful for list-like fields.
+        // Keep single-value fields on the original per-node score.
+        xpath_pattern_count: listLikeField ? (patternCounts.get(patternKey) || 1) : 1
       };
       const { score, reasons } = scoreDomCandidate({
         node: enrichedNode,
@@ -895,7 +1009,7 @@ async function analyzeHtmlResponses(sessionDir, options) {
       for (const node of htmlCatalog) {
         const key = [
           node.tag || "",
-          node.xpath_pattern || "",
+          node.list_pattern || node.xpath_pattern || "",
           node.data_test_id || "",
           node.href ? "href" : "text"
         ].join("|");
@@ -910,7 +1024,13 @@ async function analyzeHtmlResponses(sessionDir, options) {
           continue;
         }
 
-        const listXPath = buildCommonXPath(nodes.map((node) => node.xpath));
+        // Grouping below keyed on list_pattern, so every node here shares the
+        // same generalized locator. Emit that locator instead of the common
+        // prefix (which would collapse a one-segment `//a[...]` pattern to `/a[...]`).
+        const listXPath =
+          nodes[0].list_pattern ||
+          nodes[0].xpath_pattern ||
+          buildCommonXPath(nodes.map((node) => node.xpath));
         if (!listXPath) {
           continue;
         }
@@ -945,8 +1065,8 @@ async function analyzeHtmlResponses(sessionDir, options) {
           json_path: null,
           html_selector: null,
           html_xpath: listXPath,
-          html_xpath_pattern: nodes[0].xpath_pattern || null,
-          html_item_xpath: nodes[0].xpath_pattern || null,
+          html_xpath_pattern: nodes[0].list_pattern || nodes[0].xpath_pattern || null,
+          html_item_xpath: nodes[0].list_pattern || nodes[0].xpath_pattern || null,
           value_attribute: valueAttribute,
           sample_value: values.slice(0, 10),
           page_url: raw.page_url || raw.url || null,

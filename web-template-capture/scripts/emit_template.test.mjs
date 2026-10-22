@@ -41,3 +41,18 @@ test("buildResponseTemplateEntry leaves json paths unchanged", () => {
 
   assert.equal(entry.resolver.expression, "$.profile.username");
 });
+
+test("buildResponseTemplateEntry preserves a scoped repeated-node html locator", () => {
+  const entry = buildResponseTemplateEntry({
+    target: {
+      field_name: "connections",
+      field_type: "string"
+    }
+  }, {
+    source_type: "document_html",
+    html_xpath: '//*[@id="connections"]//a[@href]',
+    value_attribute: "href"
+  });
+
+  assert.equal(entry.resolver.expression, '//*[@id="connections"]//a[@href]?');
+});
