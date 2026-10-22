@@ -73,3 +73,101 @@ test("collectCandidatesForSession ignores dom snapshots and uses response artifa
   assert.equal(report.top_candidates.some((candidate) => candidate.sample_value === "network-user"), true);
   assert.equal(report.top_candidates.some((candidate) => candidate.sample_value === "html-user"), true);
 });
+
+async function writeHtmlResponse(sessionDir, html, pageUrl) {
+  await fs.writeFile(path.join(sessionDir, "responses", "0001_page.json"), JSON.stringify({
+    url: pageUrl,
+    page_url: pageUrl,
+    method: "GET",
+    content_type: "text/html",
+    body_file: "0001_page.html"
+  }, null, 2));
+  await fs.writeFile(path.join(sessionDir, "responses", "0001_page.html"), html);
+}
+
+test("collectCandidatesForSession emits a repeated-node candidate for an HTML link list", async () => {
+  const sessionDir = await makeTempSession();
+  const pageUrl = "https://example.com/connections";
+  await writeHtmlResponse(sessionDir, `
+    <html>
+      <body>
+        <ul id="connections">
+          <li><a href="/in/alice" title="Alice > Admin">Alice</a></li>
+          <li><a href="/in/bob">Bob</a></li>
+          <li><a href="/in/carol">Carol</a></li>
+        </ul>
+      </body>
+    </html>
+  `, pageUrl);
+
+  const report = await collectCandidatesForSession({
+    sessionDir,
+    fieldName: "connections",
+    fieldType: "string",
+    hintValue: null,
+    ownershipMode: "current_user"
+  });
+
+  const listCandidate = report.top_candidates[0];
+  assert.equal(listCandidate.value_attribute, "href");
+  assert.equal(listCandidate.source_type, "document_html");
+  assert.equal(listCandidate.html_xpath, '//*[@id="connections"]//a[@href]');
+  assert.equal(listCandidate.html_item_xpath, '//*[@id="connections"]//a[@href]');
+  assert.deepEqual(listCandidate.sample_value, ["/in/alice", "/in/bob", "/in/carol"]);
+});
+
+test("collectCandidatesForSession emits a repeated-node candidate for an HTML text list", async () => {
+  const sessionDir = await makeTempSession();
+  const pageUrl = "https://example.com/connections";
+  await writeHtmlResponse(sessionDir, `
+    <html>
+      <body>
+        <ul id="connections">
+          <li>Alice</li>
+          <li>Bob</li>
+          <li>Carol</li>
+        </ul>
+      </body>
+    </html>
+  `, pageUrl);
+
+  const report = await collectCandidatesForSession({
+    sessionDir,
+    fieldName: "connections",
+    fieldType: "string",
+    hintValue: null,
+    ownershipMode: "current_user"
+  });
+
+  const listCandidate = report.top_candidates[0];
+  assert.equal(listCandidate.value_attribute, "text");
+  assert.equal(listCandidate.source_type, "document_html");
+  assert.equal(listCandidate.html_xpath, '//*[@id="connections"]//li[normalize-space()]');
+  assert.deepEqual(listCandidate.sample_value, ["Alice", "Bob", "Carol"]);
+});
+
+test("collectCandidatesForSession keeps a quoted > inside an HTML attribute", async () => {
+  const sessionDir = await makeTempSession();
+  const pageUrl = "https://example.com/account";
+  await writeHtmlResponse(sessionDir, `
+    <html>
+      <body>
+        <h1 id="profile-name" title="Alice > Admin">Alice</h1>
+      </body>
+    </html>
+  `, pageUrl);
+
+  const report = await collectCandidatesForSession({
+    sessionDir,
+    fieldName: "username",
+    fieldType: "string",
+    hintValue: "Alice",
+    ownershipMode: "current_user"
+  });
+
+  const candidate = report.top_candidates.find(
+    (item) => item.html_xpath === '//*[@id="profile-name"]'
+  );
+  assert.ok(candidate, "expected the id-anchored heading candidate");
+  assert.equal(candidate.sample_value, "Alice");
+});
