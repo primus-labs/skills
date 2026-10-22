@@ -698,16 +698,12 @@ function stripTags(value) {
 }
 
 function readAttribute(attributes, name) {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const patterns = [
-    new RegExp(`\\b${escaped}\\s*=\\s*"([^"]*)"`, "i"),
-    new RegExp(`\\b${escaped}\\s*=\\s*'([^']*)'`, "i"),
-    new RegExp(`\\b${escaped}\\s*=\\s*([^\\s>]+)`, "i")
-  ];
-  for (const pattern of patterns) {
-    const match = attributes.match(pattern);
-    if (match) {
-      return decodeHtmlEntities(match[1].trim());
+  // Consume complete attributes so data-id and quoted attribute contents cannot
+  // be mistaken for an id (and similarly for name, href, title, etc.).
+  const pattern = /(?:^|\s)([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`=]+)))?/g;
+  for (const match of attributes.matchAll(pattern)) {
+    if (match[1].toLowerCase() === name.toLowerCase()) {
+      return decodeHtmlEntities((match[2] ?? match[3] ?? match[4] ?? "").trim());
     }
   }
   return "";
