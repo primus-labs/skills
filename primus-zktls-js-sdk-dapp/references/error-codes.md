@@ -1,84 +1,119 @@
 # Error Codes — Primus zkTLS-JS-SDK
 
-Source: https://docs.primuslabs.xyz/enterprise/error-code
+Source: https://docs.primuslabs.xyz/enterprise/error-code/
+SDK messages: https://github.com/primus-labs/zktls-js-sdk/blob/main/src/error.ts
+
+Preserve the error code as a string, including leading zeros. When contacting
+Primus, include the code and the subcode when present. A code identifies a
+failure category; it does not by itself establish the underlying cause.
 
 ## General Errors
 
-| Code | Situation | Likely Cause & Fix |
-|---|---|---|
-| `00000` | Operation too frequent | Rate limit hit. Add delay between calls or reduce retry frequency. |
-| `00001` | Algorithm startup exception | SDK or extension not properly initialized. Ensure `init()` completed before calling `startAttestation()`. |
-| `00002` | Verification process timed out | User took too long in the extension popup, or network timeout. Retry. |
-| `00003` | A verification is already in progress | Previous `startAttestation()` call hasn't resolved. Don't allow concurrent calls — disable the button while running. |
-| `00004` | User closed or cancelled | User dismissed the extension popup. Show a retry option. |
-| `00005` | Wrong SDK parameters | Missing or malformed params. Check `templateId`, `userAddress`, `appId`, `signedRequestStr`. |
-| `00012` | Invalid Template ID | The templateId UUID is wrong or doesn't exist in your project. Verify in dev.primuslabs.xyz. |
-| `00013` | Target data missing | The JSON path in the template doesn't match the actual response from the target URL. Check the template's data extraction path at dev.primuslabs.xyz. |
-| `00104` | Not met verification requirements | The data exists but failed the `attConditions` comparison (e.g. value was not `> 1000`). This is an expected result, not a bug. |
-| `-1002001` | Invalid App ID | appId doesn't exist or is malformed. Check dev.primuslabs.xyz. |
-| `-1002002` | Invalid App Secret | appSecret is wrong. Regenerate in dev.primuslabs.xyz. **Never commit appSecret to source control.** |
-
-## zkTLS Protocol Errors
-
-| Code | Situation | Likely Cause & Fix |
-|---|---|---|
-| `10001`–`10004` | Unstable internet connection | Network issue between extension and Primus servers. Retry. If persistent, check firewall or try changing `algorithmType` to `mpctls` (avoids proxy routing). |
-| `20001` | Internal error | Unexpected server-side error. Retry. If persistent, report to Primus Discord with the error UUID. |
-| `20003` | Invalid algorithm parameters | `algorithmType` value is wrong. Must be exactly `'proxytls'` or `'mpctls'`. |
-| `20005` | Internal error | Same as 20001. |
-| `30001` | Response error | The target data source (e.g. Binance, X) returned an unexpected response. Retry. |
-| `30002` | Response check error | Response arrived but failed integrity check. Retry. |
-| `30004` | Response parse error | Target data source returned an empty or non-JSON body. User is likely **not logged in** to the target service in the extension popup. Ensure the user logs in during the attestation popup. |
-| `40002` | SSL certificate error | TLS certificate issue on target server. Usually a temporary problem on the data source side. |
-| `50001`–`50011` | Internal / algorithm errors | Various internal execution errors. See table below. |
-| `99999` | Undefined error | Catch-all. Report to Discord with UUID from error details. |
-
-## 50xxx Detail Table
-
-| Code | Meaning |
+| Code | Situation / next step |
 |---|---|
-| `50001` | Internal error |
-| `50003` | Client unexpected error |
-| `50004` | Client not started — retry |
-| `50006` | Algorithm server not started — retry |
-| `50007` | Algorithm execution issue |
-| `50008` | Abnormal execution result |
-| `50009` | Algorithm service timed out |
-| `50010` | Compatibility issue during algorithm execution |
-| `50011` | Unsupported TLS version |
+| `00000` | Too many requests. Wait before retrying. |
+| `00001` | Algorithm startup failed. Complete `init()`, refresh if necessary, then retry. |
+| `00003` | A verification is already running. Prevent concurrent calls. |
+| `00004` | User cancelled. Offer a manual restart. |
+| `00005` | Invalid SDK parameters. Check the signed request and template. |
+| `00006` | Extension not detected. Install and enable the official Primus extension, then refresh. |
+| `00012` | Invalid template ID. Check the project's template configuration. |
+| `00104` | Verification requirements not met. This can be an expected condition result. |
+
+## zkTLS Errors
+
+| Code | Situation / next step |
+|---|---|
+| `00002` | Verification timed out. Check the flow and retry manually. |
+| `00013` | No verifiable data detected. Confirm login status and account details. |
+| `00014` | Verification timed out after a connection interruption. |
+| `10001` | Unstable internet connection. |
+| `10002` | Network interrupted during attestation. |
+| `10003` | Connection to the attestation server interrupted. |
+| `10004` | Connection to the data source server interrupted. |
+| `20001`, `20002`, `20004`, `20005` | Internal runtime error. Contact Primus. |
+| `20003` | Invalid algorithm parameters. Check the chosen SDK mode. |
+| `30001` | Response error. Preserve any subcode; see below. |
+| `30002` | Response validation error. |
+| `30003` | Response parsing error. |
+| `30004` | JSON parsing error. Contact Primus if it persists. |
+| `30005` | HTML parsing error. |
+| `30006` | Preset path key missing from the response. Contact Primus. |
+| `40001` | Internal FileNotExistException. Contact Primus. |
+| `40002` | SSL certificate error. Contact Primus. |
+| `50000` | Internal algorithm error; may include a subcode. Contact Primus. |
+| `50003` | Unexpected client error. |
+| `50004` | Client did not start correctly. |
+| `50006` | Algorithm server not started. |
+| `50009` | Algorithm service timeout. |
+| `50011` | Unsupported TLS version. Contact Primus. |
+| `99999` | Undefined error. Do not infer a specific cause. |
+
+### Response subcodes in the SDK message map
+
+| Code / subcode | SDK interpretation |
+|---|---|
+| `30001` / `301`, `404` | Request URL not detected. |
+| `30001` / `302` | Response error. |
+| `30001` / `401` | Session expired; sign in again. |
+| `30001` / `403` | Access blocked by the data source's risk controls. |
+| `30001` / `429` | Data source rate limit; wait before retrying. |
+| `50000` / `501`, `502`, `505`, `507`, `508`, `510` | Internal algorithm error. |
+
+Preserve unrecognized subcodes as well. Do not silently discard them or convert
+`0` to an absent value. Older SDK payloads can place the subcode in
+`data.details.subCode`; current SDK error objects can expose it at `subCode`.
+
+## Account & Subscription Errors
+
+| Code | Situation |
+|---|---|
+| `-1002001` | Invalid app ID. |
+| `-1002002` | Invalid app secret. |
+| `-1002003` | Trial quota exhausted. |
+| `-1002004` | Subscription expired. |
+| `-1002005` | Quota exhausted. |
+
+Keep production app secrets on the signing server.
 
 ## Error Handling Pattern
 
 ```js
-try {
-  const attestation = await primusZKTLS.startAttestation(signedRequestStr);
-  const verifyResult = await primusZKTLS.verifyAttestation(attestation);
-  if (verifyResult === true) {
-    // success
-  } else {
-    showError('Signature verification failed.');
-  }
-} catch (err) {
-  const code = err.code || err.errorData?.code || 'unknown';
-  const desc = err.message || err.errorData?.desc || JSON.stringify(err);
-
-  if (code === '00004') {
-    showError('Attestation cancelled. You can try again.');
-  } else if (code === '30004') {
-    showError('Could not read data from the target service. Please log in to the service in the popup and try again.');
-  } else if (String(code).startsWith('10')) {
-    showError(`Network error (${code}). Check your connection or try mpctls mode.`);
-  } else {
-    showError(`Attestation failed (${code}): ${desc}`);
+async function runVerification(signedRequestStr) {
+  try {
+    const attestation = await primusZKTLS.startAttestation(signedRequestStr);
+    const verified = await primusZKTLS.verifyAttestation(attestation);
+    if (verified !== true) {
+      showError('Signature verification failed.');
+      return;
+    }
+    // Apply the application's source, recipient, freshness and business rules.
+  } catch (err) {
+    const error = err?.errorData ?? err;
+    const code = String(error?.code ?? 'unknown');
+    let data = error?.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch { data = undefined; }
+    }
+    const subCode = error?.subCode ?? error?.details?.subCode ?? data?.details?.subCode;
+    const reference = subCode == null ? code : `${code} / ${String(subCode)}`;
+  
+    if (code === '00004') {
+      showError('Verification cancelled. You can start again when ready.');
+    } else if (code === '00006') {
+      showError('Install and enable the Primus extension, refresh, then retry.');
+    } else if (code === '30001' && String(subCode) === '401') {
+      showError('Your data source session expired. Please sign in again.');
+    } else {
+      showError(`Verification failed (${reference}). Check the official error reference or contact Primus.`);
+    }
+    // A support report should allowlist code/subcode, failed stage and versions.
+    // Do not dump err, headers, cookies, raw responses or attestations into it.
   }
 }
 ```
 
-## 30004 Specifically (most common in CEX proofs)
-
-Error `30004` (`ParseJsonError`) means the target service (e.g. Binance, Coinbase) returned an empty response body. Root causes in order of likelihood:
-
-1. **User is not logged in** inside the Primus extension popup. The popup must be used to authenticate with the target service — a session in a separate browser tab is not enough.
-2. **Session expired** — user was logged in but the session token expired. Log out and log back in inside the popup.
-3. **Target service blocked the request** — some CEXes detect automated traffic. Switching from `proxytls` to `mpctls` routes the request through the user's own browser, reducing detection chance.
-4. **Template endpoint changed** — the URL or response structure in the template no longer matches. Check the template in dev.primuslabs.xyz.
+`30004` describes JSON parsing failure. Authentication problems or endpoint
+changes may be investigated with additional evidence; this code alone does not
+prove that the user is logged out. An unrecognized code such as `0` must remain
+unmapped until its origin is understood.
