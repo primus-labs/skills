@@ -6,7 +6,9 @@ Build a **backend / server-side** Node.js program that uses `@primuslabs/network
 
 ```
 Use the primus-network-core-sdk skill to build a program that proves <what_to_prove>.
-The requests are <url_list>. My wallet private key is <privatekey>. Chain: <chain>.
+The requests are <url_list>. Chain: <chain>.
+Use a dedicated test wallet configured locally. The generated application must load
+PRIVATE_KEY from process.env at runtime; do not ask for or display its value in chat.
 ```
 
 ## Repositories & Docs
@@ -370,6 +372,7 @@ ETH faucet for Base Sepolia: https://www.alchemy.com/faucets/base-sepolia
 
 ## Working Rules
 
+- **AI agent secret boundary:** Never request, open, print, or copy real keys or tokens from a user's `.env`, credential store, or chat. Generate `.env.example` with placeholders only; instruct the user to populate `.env` locally or configure a secret manager themselves. Only the generated application should read `process.env.PRIVATE_KEY` at runtime. Use a dedicated, minimally funded test wallet for development.
 - **CRITICAL — Never expose your wallet private key or `.env` file publicly.** This is the single most dangerous mistake in backend development. Specifically:
   - Always add `.env` to `.gitignore` **before** the first `git commit`. Once committed and pushed, even if deleted later, the key is permanently compromised in git history.
   - Never paste private keys into chat, issues, PRs, logs, or any public forum.
