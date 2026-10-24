@@ -73,3 +73,49 @@ test("collectCandidatesForSession ignores dom snapshots and uses response artifa
   assert.equal(report.top_candidates.some((candidate) => candidate.sample_value === "network-user"), true);
   assert.equal(report.top_candidates.some((candidate) => candidate.sample_value === "html-user"), true);
 });
+
+async function collectForUrl(url) {
+  const sessionDir = await makeTempSession();
+  await fs.writeFile(path.join(sessionDir, "responses", "0001_profile.json"), JSON.stringify({
+    url,
+    page_url: "https://example.com/app",
+    method: "POST",
+    json: { data: { user: { username: "graphql-user" } } }
+  }, null, 2));
+
+  const report = await collectCandidatesForSession({
+    sessionDir,
+    fieldName: "username",
+    fieldType: "string"
+  });
+
+  return report.top_candidates.find((candidate) => candidate.sample_value === "graphql-user");
+}
+
+test("generalizes root-level graphql requests without duplicating the graphql segment", async () => {
+  const withOpaqueSegment = await collectForUrl("https://example.com/graphql/abc123/GetUserProfile");
+  assert.equal(withOpaqueSegment.request_url_pattern, "https://example.com/graphql/*/GetUserProfile");
+  assert.equal(withOpaqueSegment.operation_name, "GetUserProfile");
+
+  const withoutOpaqueSegment = await collectForUrl("https://example.com/graphql/GetUserProfile");
+  assert.equal(withoutOpaqueSegment.request_url_pattern, "https://example.com/graphql/*/GetUserProfile");
+  assert.equal(withoutOpaqueSegment.operation_name, "GetUserProfile");
+});
+
+test("generalizes nested graphql requests without duplicating path segments", async () => {
+  const candidate = await collectForUrl("https://example.com/api/graphql/abc123/GetUserProfile");
+  assert.equal(candidate.request_url_pattern, "https://example.com/api/graphql/*/GetUserProfile");
+  assert.equal(candidate.operation_name, "GetUserProfile");
+});
+
+test("keeps the observed path for graphql paths without an operation segment", async () => {
+  const candidate = await collectForUrl("https://example.com/graphql/abc123/");
+  assert.equal(candidate.request_url_pattern, "https://example.com/graphql/abc123/");
+  assert.equal(candidate.operation_name, "abc123");
+});
+
+test("keeps the observed path for non-graphql requests", async () => {
+  const candidate = await collectForUrl("https://example.com/api/profile");
+  assert.equal(candidate.request_url_pattern, "https://example.com/api/profile");
+  assert.equal(candidate.operation_name, "profile");
+});

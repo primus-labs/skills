@@ -236,12 +236,17 @@ function generalizeUrl(rawUrl) {
   try {
     const parsed = new URL(rawUrl);
     const parts = parsed.pathname.split("/").filter(Boolean);
-    if (parts.includes("graphql") && parts.length >= 2) {
-      const opName = parts.at(-1);
-      const prefix = parts.slice(0, -2).join("/");
+    const graphqlIndex = parts.lastIndexOf("graphql");
+    const hasOperationSegment = graphqlIndex !== -1
+      && parts.length - graphqlIndex >= 2
+      && !parsed.pathname.endsWith("/");
+    if (hasOperationSegment) {
+      const operationName = parts.at(-1);
+      const prefixSegments = parts.slice(0, graphqlIndex);
+      const prefix = prefixSegments.length > 0 ? `/${prefixSegments.join("/")}` : "";
       return {
-        request_url_pattern: `${parsed.origin}/${prefix}/graphql/*/${opName}`,
-        operation_name: opName
+        request_url_pattern: `${parsed.origin}${prefix}/graphql/*/${operationName}`,
+        operation_name: operationName
       };
     }
     return {
