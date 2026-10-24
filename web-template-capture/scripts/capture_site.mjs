@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+
+import { isMainModule } from "./lib/is_main_module.mjs";
 
 async function loadChromium() {
   try {
@@ -1168,7 +1169,7 @@ async function main() {
   console.log(`Capture complete. Session saved to ${sessionDir}`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   main().catch((error) => {
     console.error(error);
     process.exitCode = 1;

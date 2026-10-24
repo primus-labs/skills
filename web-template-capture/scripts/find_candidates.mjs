@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+
+import { isMainModule } from "./lib/is_main_module.mjs";
 
 function parseArgs(argv) {
   const args = {};
@@ -1029,7 +1030,7 @@ async function main() {
   console.log(JSON.stringify(report, null, 2));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   main().catch((error) => {
     console.error(error);
     process.exitCode = 1;
