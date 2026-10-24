@@ -65,24 +65,37 @@ function inferHost(...values) {
   return null;
 }
 
-function inferDataSource(host, fallbackUrl) {
-  if (host) {
-    const segments = host.split(".").filter(Boolean);
-    if (segments.length >= 2) {
-      return segments.at(-2);
-    }
-    return host;
+function hostnameFromUrl(value) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
+}
+
+const MULTI_PART_PUBLIC_SUFFIX_LABELS = new Set(["ac", "co", "com", "edu", "gov", "net", "org"]);
+
+export function inferDataSource(host, fallbackUrl) {
+  const source = host || hostnameFromUrl(fallbackUrl);
+  if (!source) {
+    return "web";
   }
 
-  if (fallbackUrl) {
-    try {
-      return new URL(fallbackUrl).hostname.split(".").filter(Boolean).at(-2) || "web";
-    } catch {
-      return "web";
-    }
+  const labels = String(source).split(".").filter(Boolean);
+  if (labels.length <= 1) {
+    return source;
   }
 
-  return "web";
+  // Public suffixes such as co.uk, com.au or co.jp need one more label: the
+  // second-to-last label alone would name the suffix (for example "co").
+  if (labels.length >= 3 && MULTI_PART_PUBLIC_SUFFIX_LABELS.has(labels.at(-2).toLowerCase())) {
+    return labels.at(-3);
+  }
+
+  return labels.at(-2);
 }
 
 function escapeRegexLiteral(value) {
