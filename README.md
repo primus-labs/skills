@@ -15,9 +15,9 @@ Set up the <skill_name> skill from https://github.com/primus-labs/skills.git, in
 If local fallback setup is needed:
 
 ```bash
-git clone https://github.com/primus-labs/template-bot.git
-cd template-bot/<skill-folder>
-npm run setup
+git clone https://github.com/primus-labs/skills.git
+cd skills/<skill-folder>
+npm install
 npm run doctor
 ```
 
